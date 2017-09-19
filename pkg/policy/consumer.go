@@ -98,6 +98,7 @@ func NewConsumable(id NumericIdentity, lbls *Identity, cache *ConsumableCache) *
 func (c *Consumable) ResolveIdentityFromCache(id NumericIdentity) *Identity {
 	cc := c.cache.Lookup(id)
 	if cc != nil {
+		log.Debug("MK ResolveIdentityFromCache for id: ", id, " cc ID:", cc.ID)
 		return cc.Labels
 	}
 	return nil

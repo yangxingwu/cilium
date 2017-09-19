@@ -288,6 +288,7 @@ func (r *Redirect) getInfoFromConsumable(ipstr string, info *accesslog.EndpointI
 	secIdentity := ep.ResolveIdentity(srcIdentity)
 
 	if secIdentity != nil {
+		//info.ID = secIdentity.
 		info.Labels = secIdentity.Labels.GetModel()
 		info.LabelsSHA256 = secIdentity.Labels.SHA256Sum()
 		info.Identity = uint64(srcIdentity)
