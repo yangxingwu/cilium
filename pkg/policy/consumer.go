@@ -101,6 +101,9 @@ func (c *Consumable) ResolveIdentityFromCache(id NumericIdentity) *Identity {
 		log.Debug("MK ResolveIdentityFromCache for id: ", id, " cc ID:", cc.ID)
 		log.Debug("MK ResolveIdentityFromCache for id: ", id, " cc.Consumers[string(id)]:", cc.Consumers[string(id)])
 		log.Debug("MK ResolveIdentityFromCache for id: ", id, " cc.Consumers", cc.Consumers)
+		for k, v := range cc.Consumers {
+			log.Debug("MK ResolveIdentityFromCache Consumers LOOP key: ", k, "value:", v)
+		}
 		return cc.Labels
 	}
 	return nil
