@@ -233,6 +233,7 @@ func LookupLocked(id string) (*endpoint.Endpoint, error) {
 func TriggerPolicyUpdates(owner endpoint.Owner) *sync.WaitGroup {
 	var wg sync.WaitGroup
 
+	log.Debug("MK in TriggerPolicyUpdates ")
 	Mutex.RLock()
 
 	wg.Add(len(Endpoints))

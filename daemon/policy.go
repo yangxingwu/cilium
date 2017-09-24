@@ -69,6 +69,7 @@ func (d *Daemon) invalidateCache() {
 // TriggerPolicyUpdates triggers policy updates for every daemon's endpoint.
 // Returns a waiting group which signalizes when all endpoints are regenerated.
 func (d *Daemon) TriggerPolicyUpdates(added []policy.NumericIdentity) *sync.WaitGroup {
+	log.Debug("MK in TriggerPolicyUpdates added: ", added)
 	if len(added) == 0 {
 		log.Debugf("Full policy recalculation triggered")
 		d.invalidateCache()
@@ -329,6 +330,7 @@ func (d *Daemon) policyAdd(rules api.Rules, opts *AddOptions) (uint64, error) {
 func (d *Daemon) PolicyAdd(rules api.Rules, opts *AddOptions) (uint64, error) {
 	log.Debugf("Policy Add Request: %+v", rules)
 
+	log.Debug("MK in PolicyAdd for rules: ", rules, "opts:", opts)
 	for _, r := range rules {
 		if err := r.Validate(); err != nil {
 			return 0, apierror.Error(PutPolicyFailureCode, err)
@@ -353,6 +355,7 @@ func (d *Daemon) PolicyAdd(rules api.Rules, opts *AddOptions) (uint64, error) {
 func (d *Daemon) PolicyDelete(labels labels.LabelArray) (uint64, error) {
 	log.Debugf("Policy Delete Request: %+v", labels)
 
+	log.Debug("MK in PolicyDelete for labels: ", labels)
 	// An error is only returned if a label filter was provided and then
 	// not found A deletion request for all policy entries if no policied
 	// are loaded should not fail.

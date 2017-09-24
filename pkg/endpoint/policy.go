@@ -129,6 +129,8 @@ func (e *Endpoint) cleanUnusedRedirects(owner Owner, oldMap policy.L4PolicyMap, 
 func (e *Endpoint) regenerateConsumable(owner Owner) (bool, error) {
 	c := e.Consumable
 
+	log.Debug("MK in regenerateConsumable for endpoint: ",e.ID, " secLabel: ",e.SecLabel)
+
 	// Containers without a security label are not accessible
 	if c.ID == 0 {
 		log.Fatalf("[%s] BUG: Endpoints lacks identity", e.PolicyID())
@@ -252,6 +254,7 @@ func (e *Endpoint) regenerateL3Policy(owner Owner) (bool, error) {
 func (e *Endpoint) regeneratePolicy(owner Owner) (bool, error) {
 	log.Debugf("[%s] Starting regenerate...", e.PolicyID())
 
+	log.Debug("MK in regeneratePolicy ")
 	policyChanged, err := e.regenerateConsumable(owner)
 	if err != nil {
 		return false, err
@@ -317,6 +320,7 @@ func (e *Endpoint) regeneratePolicy(owner Owner) (bool, error) {
 func (e *Endpoint) regenerate(owner Owner) error {
 	origDir := filepath.Join(owner.GetStateDir(), e.StringID())
 
+	log.Debug("MK in regenerate for endpoint : ",e.ID)
 	// This is the temporary directory to store the generated headers,
 	// the original existing directory is not overwritten until the
 	// entire generation process has succeeded.
@@ -439,6 +443,7 @@ func (e *Endpoint) Regenerate(owner Owner) <-chan bool {
 // Returns true if policy was changed and endpoints needs to be rebuilt
 func (e *Endpoint) TriggerPolicyUpdates(owner Owner) (bool, error) {
 	e.Mutex.Lock()
+	log.Debug("MK in TriggerPolicyUpdates for endpoint: ",e.ID)
 	defer e.Mutex.Unlock()
 	if e.Consumable == nil {
 		return false, nil

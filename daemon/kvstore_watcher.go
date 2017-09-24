@@ -30,6 +30,7 @@ func (d *Daemon) EnableKVStoreWatcher(maxSeconds time.Duration) {
 	if maxID, err := GetMaxLabelID(); err == nil {
 		d.setCachedMaxLabelID(maxID)
 	}
+	log.Debug("MK in EnableKVStoreWatcher")
 	ch := kvstore.Client().GetWatcher(common.LastFreeLabelIDKeyPath, maxSeconds)
 	go func() {
 		for {

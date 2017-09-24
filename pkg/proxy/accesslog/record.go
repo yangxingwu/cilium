@@ -195,3 +195,9 @@ type LogRecordHTTP struct {
 	// Header is the HTTP header in use
 	Header http.Header
 }
+
+// LogRecordKafka contains the Kafka specific portion of a log record
+type LogRecordKafka struct {
+	// API key in Kafka 0 for producer and 1 for consumer.
+	API_KEY int
+}

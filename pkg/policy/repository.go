@@ -21,6 +21,7 @@ import (
 
 	"github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/policy/api"
+	log "github.com/sirupsen/logrus"
 )
 
 // Repository is a list of policy rules which in combination form the security
@@ -108,6 +109,7 @@ func (p *Repository) AllowsRLocked(ctx *SearchContext) api.Decision {
 //
 // TODO: Need better rule merging on conflicting port definitions, concat l7 rules?
 func (p *Repository) ResolveL4Policy(ctx *SearchContext) *L4Policy {
+	log.Debug("MK in ResolveL4Policy ")
 	result := NewL4Policy()
 
 	if ctx.EgressL4Only {

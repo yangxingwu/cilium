@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cilium/cilium/pkg/policy/api"
+	log "github.com/sirupsen/logrus"
 )
 
 type rule struct {
@@ -43,6 +44,7 @@ func (r *rule) validate() error {
 
 func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir string, proto string, resMap L4PolicyMap) int {
 	fmt := p.Port + "/" + proto
+	log.Debug("MK in mergeL4Port with api.PortRule: ",r," api.PortProtocol:", p," dir:", dir, " proto:",proto, " L4PolicyMap:",resMap )
 	v, ok := resMap[fmt]
 	if !ok {
 		resMap[fmt] = CreateL4Filter(r, p, dir, proto)
@@ -62,6 +64,7 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 
 func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4PolicyMap) int {
 	found := 0
+	log.Debug("MK in mergeL4Port with portRules: ",portRules, " resmap:",resMap, " dir:",dir)
 
 	for _, r := range portRules {
 		ctx.PolicyTrace("  Allows %s port %v\n", dir, r.Ports)
@@ -78,6 +81,7 @@ func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4
 
 		for _, p := range r.Ports {
 			if p.Protocol != "" {
+				log.Debug("MK in mergeL4Port loopport p.Protocol != empty")
 				found += mergeL4Port(ctx, r, p, dir, p.Protocol, resMap)
 			} else {
 				found += mergeL4Port(ctx, r, p, dir, "tcp", resMap)
@@ -90,6 +94,7 @@ func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4
 }
 
 func (r *rule) resolveL4Policy(ctx *SearchContext, state *traceState, result *L4Policy) *L4Policy {
+	log.Debug("MK in resolveL4Policy state:",state, " result:",result)
 	if !r.EndpointSelector.Matches(ctx.To) {
 		ctx.PolicyTraceVerbose("  Rule %d %s: no match\n", state.ruleID, r)
 		return nil
@@ -100,12 +105,14 @@ func (r *rule) resolveL4Policy(ctx *SearchContext, state *traceState, result *L4
 	found := 0
 
 	if !ctx.EgressL4Only {
+		log.Debug("MK in resolveL4Policy ingress true")
 		for _, r := range r.Ingress {
 			found += mergeL4(ctx, "Ingress", r.ToPorts, result.Ingress)
 		}
 	}
 
 	if !ctx.IngressL4Only {
+		log.Debug("MK in resolveL4Policy egress true")
 		for _, r := range r.Egress {
 			found += mergeL4(ctx, "Egress", r.ToPorts, result.Egress)
 		}

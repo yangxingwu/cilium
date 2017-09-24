@@ -1254,6 +1254,7 @@ func (h *patchConfig) Handle(params PatchConfigParams) middleware.Responder {
 
 	d := h.daemon
 
+	log.Debug("MK in Handle for PatchConfig params: ", params)
 	// Serialize configuration updates to the daemon.
 	d.conf.ConfigPatchMutex.Lock()
 	defer d.conf.ConfigPatchMutex.Unlock()

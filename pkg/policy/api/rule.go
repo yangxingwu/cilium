@@ -207,6 +207,11 @@ type L7Rules struct {
 	//
 	// +optional
 	HTTP []PortRuleHTTP `json:"http,omitempty"`
+	// Kafka specific rules.
+	//
+	// +optional
+	Kafka []PortRuleKafka `json:"kafka,omitempty"`
+
 }
 
 // PortRuleHTTP is a list of HTTP protocol constraints. All fields are
@@ -219,6 +224,45 @@ type L7Rules struct {
 // characters disallowed from the conventional "path" part of a URL as defined
 // by RFC 3986.
 type PortRuleHTTP struct {
+	// Path is an extended POSIX regex matched against the path of a
+	// request. Currently it can contain characters disallowed from the
+	// conventional "path" part of a URL as defined by RFC 3986. Paths must
+	// begin with a '/'.
+	//
+	// If omitted or empty, all paths are all allowed.
+	//
+	// +optional
+	Path string `json:"path,omitempty" protobuf:"bytes,1,opt,name=path"`
+
+	// Method is an extended POSIX regex matched against the method of a
+	// request, e.g. "GET", "POST", "PUT", "PATCH", "DELETE", ...
+	//
+	// If omitted or empty, all methods are allowed.
+	//
+	// +optional
+	Method string `json:"method,omitempty" protobuf:"bytes,1,opt,name=method"`
+
+	// Host is an extended POSIX regex matched against the host header of a
+	// request, e.g. "foo.com"
+	//
+	// If omitted or empty, the value of the host header is ignored.
+	//
+	// +optional
+	Host string `json:"host,omitempty" protobuf:"bytes,1,opt,name=method"`
+
+	// Headers is a list of HTTP headers which must be present in the
+	// request. If omitted or empty, requests are allowed regardless of
+	// headers present.
+	//
+	// +optional
+	Headers []string `json:"headers,omitempty"`
+}
+
+// PortRuleKafka is a list of Kafka protocol constraints. All fields are
+// optional, if all fields are empty or missing, the rule does not have any
+// effect.
+//
+type PortRuleKafka struct {
 	// Path is an extended POSIX regex matched against the path of a
 	// request. Currently it can contain characters disallowed from the
 	// conventional "path" part of a URL as defined by RFC 3986. Paths must
