@@ -49,6 +49,7 @@ func gasNewL3n4AddrID(l3n4AddrID *types.L3n4AddrID, baseID uint32) error {
 // created for the given l3n4Addr. If baseID is different than 0, it tries to acquire that
 // ID to the l3n4Addr.
 func PutL3n4Addr(l3n4Addr types.L3n4Addr, baseID uint32) (*types.L3n4AddrID, error) {
+	log.Debug("MK in PutL3n4Addr")
 	log.Debugf("Resolving service %+v", l3n4Addr)
 
 	// Retrieve unique SHA256Sum for service

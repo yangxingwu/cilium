@@ -437,6 +437,7 @@ func (d *Daemon) serviceDelFn(obj interface{}) {
 }
 
 func (d *Daemon) endpointAddFn(obj interface{}) {
+	log.Debug("MK in endpointAddFn")
 	ep, ok := obj.(*v1.Endpoints)
 	if !ok {
 		return
@@ -613,6 +614,7 @@ func (d *Daemon) addK8sSVCs(svc types.K8sServiceNamespace, svcInfo *types.K8sSer
 				log.Errorf("Error while getting a new service ID: %s. Ignoring service %v...", err, feAddr)
 				continue
 			}
+			log.Debug("MK in addK8sSVCs ")
 			log.Debugf("Got feAddr ID %d for service %+v", feAddrID.ID, svc)
 			fePort.ID = feAddrID.ID
 		}
@@ -935,6 +937,7 @@ func (d *Daemon) addCiliumNetworkPolicy(obj interface{}) {
 		return
 	}
 
+	log.Debug("MK in addCiliumNetworkPolicy")
 	log.Debugf("Adding CiliumNetworkPolicy %+v", rule)
 
 	rules, err := rule.Parse()
