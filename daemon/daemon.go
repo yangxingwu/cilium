@@ -229,6 +229,7 @@ func (d *Daemon) GetBpfDir() string {
 
 // GetPolicyRepository returns the policy repository of the daemon
 func (d *Daemon) GetPolicyRepository() *policy.Repository {
+	log.Debug("MK in GetPolicyRepository d.policy:",d.policy)
 	return d.policy
 }
 

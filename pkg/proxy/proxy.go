@@ -165,6 +165,7 @@ func lookupNewDest(req *http.Request, dport uint16) (uint32, string, error) {
 		return 0, "", fmt.Errorf("invalid remote address: %s", err)
 	}
 
+	log.Debug("MK in lookupNewDest with http req: ",req, " dport: ",dport)
 	pIP := net.ParseIP(ip)
 	if pIP == nil {
 		return 0, "", fmt.Errorf("unable to parse IP %s", ip)
@@ -443,12 +444,13 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	log.Debug("MK in CreateOrUpdateRedirect l4:", l4, " id:", id, " proxysource:", source)
 	fwd, err := forward.New(forward.RoundTripper(transport))
 	if err != nil {
 		return nil, err
 	}
 
-	if strings.ToLower(l4.L7Parser) != "http" {
+	if !(strings.ToLower(l4.L7Parser) == "http" || strings.ToLower(l4.L7Parser) == "kafka") {
 		return nil, fmt.Errorf("unknown L7 protocol \"%s\"", l4.L7Parser)
 	}
 
@@ -556,6 +558,7 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 				return
 			}
 			ar := rule.(policy.AuxRule)
+			log.Debug("MK in CreateOrUpdateRedirect redir.Rules: ",redir.Rules, "aux rule ar:",ar)
 			log.Debugf("Allowing request based on rule %+v", ar)
 			record.Info = fmt.Sprintf("rule: %+v", ar)
 		}

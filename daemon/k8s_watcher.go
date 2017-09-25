@@ -931,6 +931,7 @@ func (d *Daemon) syncExternalLB(newSN, modSN, delSN *types.K8sServiceNamespace) 
 }
 
 func (d *Daemon) addCiliumNetworkPolicy(obj interface{}) {
+	log.Debug("MK in addCiliumNetworkPolicy ")
 	rule, ok := obj.(*k8s.CiliumNetworkPolicy)
 	if !ok {
 		log.Warningf("Received unknown object %+v, expected a CiliumNetworkPolicy object", obj)

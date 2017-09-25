@@ -84,6 +84,7 @@ func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4
 				log.Debug("MK in mergeL4Port loopport p.Protocol != empty")
 				found += mergeL4Port(ctx, r, p, dir, p.Protocol, resMap)
 			} else {
+				log.Debug("MK in mergeL4Port tcp/udp p.Protocol = empty")
 				found += mergeL4Port(ctx, r, p, dir, "tcp", resMap)
 				found += mergeL4Port(ctx, r, p, dir, "udp", resMap)
 			}
