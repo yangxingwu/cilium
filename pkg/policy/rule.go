@@ -45,6 +45,7 @@ func (r *rule) validate() error {
 func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir string, proto string, resMap L4PolicyMap) int {
 	fmt := p.Port + "/" + proto
 	log.Debug("MK in mergeL4Port with api.PortRule: ",r," api.PortProtocol:", p," dir:", dir, " proto:",proto, " L4PolicyMap:",resMap )
+
 	v, ok := resMap[fmt]
 	if !ok {
 		resMap[fmt] = CreateL4Filter(r, p, dir, proto)
@@ -52,6 +53,7 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 	}
 	l4Filter := CreateL4Filter(r, p, dir, proto)
 	if l4Filter.L7Parser != "" {
+		log.Debug("MK in mergeL4Port l4Filter.L7Parser:",l4Filter.L7Parser)
 		v.L7Parser = l4Filter.L7Parser
 	}
 	if l4Filter.L7RedirectPort != 0 {
@@ -64,7 +66,7 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 
 func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4PolicyMap) int {
 	found := 0
-	log.Debug("MK in mergeL4Port with portRules: ",portRules, " resmap:",resMap, " dir:",dir)
+	log.Debug("MK in mergeL4 with portRules: ",portRules, " resmap:",resMap, " dir:",dir)
 
 	for _, r := range portRules {
 		ctx.PolicyTrace("  Allows %s port %v\n", dir, r.Ports)
@@ -81,10 +83,10 @@ func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4
 
 		for _, p := range r.Ports {
 			if p.Protocol != "" {
-				log.Debug("MK in mergeL4Port loopport p.Protocol != empty")
+				log.Debug("MK in mergeL4 loopport p.Protocol != empty")
 				found += mergeL4Port(ctx, r, p, dir, p.Protocol, resMap)
 			} else {
-				log.Debug("MK in mergeL4Port tcp/udp p.Protocol = empty")
+				log.Debug("MK in mergeL4 tcp/udp p.Protocol = empty")
 				found += mergeL4Port(ctx, r, p, dir, "tcp", resMap)
 				found += mergeL4Port(ctx, r, p, dir, "udp", resMap)
 			}

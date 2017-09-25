@@ -47,7 +47,7 @@ type L4Filter struct {
 // CreateL4Filter creates an L4Filter based on an api.PortRule and api.PortProtocol
 func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, protocol string) L4Filter {
 	// already validated via PortRule.Validate()
-	log.Debug("MK in CreateL4Filter with rule:",rule, " port: ", port, " direction:", direction,"  protocol :",protocol)
+	log.Debug("MK in CreateL4Filter with rule:", rule, " port: ", port, " direction:", direction, "  protocol :", protocol)
 	p, _ := strconv.ParseUint(port.Port, 0, 16)
 
 	l4 := L4Filter{
@@ -60,8 +60,11 @@ func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, 
 		l4.Ingress = true
 	}
 
+	log.Debug("MK in CreateL4Filter rules.Rules:", rule.Rules)
 	if rule.Rules != nil {
 		l7rules := []AuxRule{}
+		log.Debug("MK in CreateL4Filter rules.Rules loop HTTP : ", rule.Rules.HTTP)
+		log.Debug("MK in CreateL4Filter rules.Rules loop Kafka : ", rule.Rules.Kafka)
 		for _, h := range rule.Rules.HTTP {
 			r := AuxRule{}
 
@@ -100,7 +103,9 @@ func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, 
 			}
 
 			if r.Expr != "" {
+				log.Debug("MK in CreateL4Filter constructed  r.Expr ")
 				l7rules = append(l7rules, r)
+				log.Debug("MK in CreateL4Filter appended L7rules: ", l7rules)
 			}
 		}
 
