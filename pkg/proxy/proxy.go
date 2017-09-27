@@ -450,11 +450,14 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 		return nil, err
 	}
 
+	log.Debug("MK in CreateOrUpdateRedirect l4.l7Parser: ",strings.ToLower(l4.L7Parser))
 	if !(strings.ToLower(l4.L7Parser) == "http" || strings.ToLower(l4.L7Parser) == "kafka") {
 		return nil, fmt.Errorf("unknown L7 protocol \"%s\"", l4.L7Parser)
 	}
 
 	for _, r := range l4.L7Rules {
+		log.Debug("MK in CreateOrUpdateRedirect L7Rules loop r:",r)
+		// TODO... check if kafka or http and switch check if valid expression accordingly.
 		if !route.IsValid(r.Expr) {
 			return nil, fmt.Errorf("invalid filter expression: %s", r.Expr)
 		}

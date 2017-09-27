@@ -42,6 +42,8 @@ func (r *rule) validate() error {
 	return nil
 }
 
+
+//TODO this is across all the ports of the entire cluster..
 func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir string, proto string, resMap L4PolicyMap) int {
 	fmt := p.Port + "/" + proto
 	log.Debug("MK in mergeL4Port with api.PortRule: ",r," api.PortProtocol:", p," dir:", dir, " proto:",proto, " L4PolicyMap:",resMap )
@@ -56,7 +58,7 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 		log.Debug("MK in mergeL4Port l4Filter.L7Parser:",l4Filter.L7Parser)
 		v.L7Parser = l4Filter.L7Parser
 	}
-	if l4Filter.L7RedirectPort != 0 {
+	if l4Filter.L7RedirectPort != 0 { //TODO >>>>>>>>>>> here here,,, errflag = true if port = 80 , http and then port = 80 = kafka by 2 different yamls..
 		v.L7RedirectPort = l4Filter.L7RedirectPort
 	}
 	v.L7Rules = append(v.L7Rules, l4Filter.L7Rules...)

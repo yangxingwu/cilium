@@ -159,6 +159,7 @@ func New(setters ...optSetter) (*Forwarder, error) {
 // ServeHTTP decides which forwarder to use based on the specified
 // request and delegates to the proper implementation
 func (f *Forwarder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	log.Debug("MK in ServeHTTP with http.Request: ", req)
 	if log.GetLevel() >= log.DebugLevel {
 		logEntry := log.WithField("Request", utils.DumpHttpRequest(req))
 		logEntry.Debug("vulcand/oxy/forward: begin ServeHttp on request")

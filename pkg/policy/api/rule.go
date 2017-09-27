@@ -207,6 +207,7 @@ type L7Rules struct {
 	//
 	// +optional
 	HTTP []PortRuleHTTP `json:"http,omitempty"`
+
 	// Kafka specific rules.
 	//
 	// +optional
@@ -263,36 +264,31 @@ type PortRuleHTTP struct {
 // effect.
 //
 type PortRuleKafka struct {
-	// Path is an extended POSIX regex matched against the path of a
-	// request. Currently it can contain characters disallowed from the
-	// conventional "path" part of a URL as defined by RFC 3986. Paths must
-	// begin with a '/'.
-	//
-	// If omitted or empty, all paths are all allowed.
-	//
-	// +optional
-	Path string `json:"path,omitempty" protobuf:"bytes,1,opt,name=path"`
+	// POSIX regexp; TODO: or range of integers?
+	ApiVersion string `json:"apiVersion,omitempty"`
 
-	// Method is an extended POSIX regex matched against the method of a
-	// request, e.g. "GET", "POST", "PUT", "PATCH", "DELETE", ...
-	//
-	// If omitted or empty, all methods are allowed.
-	//
-	// +optional
-	Method string `json:"method,omitempty" protobuf:"bytes,1,opt,name=method"`
+	Topic KafkaTopicRule `json:"topic,omitempty"`
 
-	// Host is an extended POSIX regex matched against the host header of a
-	// request, e.g. "foo.com"
-	//
-	// If omitted or empty, the value of the host header is ignored.
-	//
-	// +optional
-	Host string `json:"host,omitempty" protobuf:"bytes,1,opt,name=method"`
-
-	// Headers is a list of HTTP headers which must be present in the
-	// request. If omitted or empty, requests are allowed regardless of
-	// headers present.
-	//
-	// +optional
-	Headers []string `json:"headers,omitempty"`
+	// TODO: Define which messages are actually matched when this is true.
+	Admin bool `json:"admin,omitempty"`
 }
+
+type KafkaTopicRule struct {
+	// POSIX regexp
+	Topic   string `json:"topic,omitempty"`
+	Produce bool   `json:"produce,omitempty"`
+	Fetch   bool   `json:"fetch,omitempty"`
+	Create  bool   `json:"create,omitempty"`
+	Delete  bool   `json:"delete,omitempty"`
+}
+
+
+/*
+ Example:
+ "rules": [
+{"kafka": [
+{"apiVersion": "^3$", "topic": {"topic": "covalent", "produce": true, "create": true}}
+]}
+]
+
+ */

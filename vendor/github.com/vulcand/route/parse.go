@@ -12,6 +12,9 @@ func IsValid(expr string) bool {
 	return err == nil
 }
 
+
+//Manali TODO new parser here for kafka.
+
 func parse(expression string, result *match) (matcher, error) {
 	p, err := predicate.NewParser(predicate.Def{
 		Functions: map[string]interface{}{
