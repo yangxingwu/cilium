@@ -26,7 +26,7 @@ import (
 )
 
 type AuxRule struct {
-	Expr string `json:"expr"`
+	Expr   string `json:"expr"`
 	L7type string `json:"L7type"`
 }
 
@@ -74,6 +74,7 @@ func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, 
 		if rule.Rules.HTTP {
 			for _, h := range rule.Rules.HTTP {
 				r := AuxRule{}
+				r.L7type = "http"
 
 				if h.Path != "" {
 					r.Expr = "PathRegexp(\"" + h.Path + "\")"
@@ -121,7 +122,60 @@ func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, 
 				l4.L7Rules = l7rules
 			}
 		} else { //rule.Rule == Kafka.
+			/*
+					type PortRuleKafka struct {
+					// POSIX regexp; TODO: or range of integers?
+					ApiVersion string `json:"apiVersion,omitempty"`
 
+					Topic KafkaTopicRule `json:"topic,omitempty"`
+
+					// TODO: Define which messages are actually matched when this is true.
+					Admin bool `json:"admin,omitempty"`
+				}
+
+				type KafkaTopicRule struct {
+				// POSIX regexp
+				Topic   string `json:"topic,omitempty"`
+				Produce bool   `json:"produce,omitempty"`
+				Fetch   bool   `json:"fetch,omitempty"`
+				Create  bool   `json:"create,omitempty"`
+				Delete  bool   `json:"delete,omitempty"`
+				}
+
+			*/
+			for _, h := range rule.Rules.Kafka {
+				r := AuxRule{}
+				r.L7type = "kafka"
+
+				if h.ApiVersion != "" {
+					r.Expr = "ApiVersionRegexp(\"" + h.ApiVersion + "\")"
+				}
+
+				if h.Topic != "" {
+					if r.Expr != "" {
+						r.Expr += " && "
+					}
+					r.Expr += "TopicRegexp(\"" + h.Topic + "\")"
+				}
+
+				if h.ApiKey != "" {
+					if r.Expr != "" {
+						r.Expr += " && "
+					}
+					r.Expr += "ApiKeyRegexp(\"" + h.ApiKey + "\")"
+				}
+
+				if r.Expr != "" {
+					log.Debug("MK in CreateL4Filter constructed  r.Expr ")
+					l7rules = append(l7rules, r)
+					log.Debug("MK in CreateL4Filter appended L7rules: ", l7rules)
+				}
+			}
+
+			if len(l7rules) > 0 {
+				l4.L7Parser = "kafka"
+				l4.L7Rules = l7rules
+			}
 		}
 	}
 
@@ -130,7 +184,7 @@ func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, 
 
 // IsRedirect returns true if the L4 filter contains a port redirection
 func (l4 *L4Filter) IsRedirect() bool {
-	log.Debug("MK in IsRedirect l4.L7Parser:",l4.L7Parser)
+	log.Debug("MK in IsRedirect l4.L7Parser:", l4.L7Parser)
 	return l4.L7Parser != ""
 }
 

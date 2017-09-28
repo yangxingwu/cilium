@@ -54,11 +54,11 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 		return 1
 	}
 	l4Filter := CreateL4Filter(r, p, dir, proto)
-	if l4Filter.L7Parser != "" {
+	if l4Filter.L7Parser != "" { ////TODO >>>>>>>>>>> here here,,, errflag = true if port = 80 , http and then port = 80 = kafka by 2 different yamls..
 		log.Debug("MK in mergeL4Port l4Filter.L7Parser:",l4Filter.L7Parser)
 		v.L7Parser = l4Filter.L7Parser
 	}
-	if l4Filter.L7RedirectPort != 0 { //TODO >>>>>>>>>>> here here,,, errflag = true if port = 80 , http and then port = 80 = kafka by 2 different yamls..
+	if l4Filter.L7RedirectPort != 0 {
 		v.L7RedirectPort = l4Filter.L7RedirectPort
 	}
 	v.L7Rules = append(v.L7Rules, l4Filter.L7Rules...)
@@ -70,6 +70,7 @@ func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4
 	found := 0
 	log.Debug("MK in mergeL4 with portRules: ",portRules, " resmap:",resMap, " dir:",dir)
 
+	// TODO support Policy trace too for kafka.
 	for _, r := range portRules {
 		ctx.PolicyTrace("  Allows %s port %v\n", dir, r.Ports)
 

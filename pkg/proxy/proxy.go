@@ -38,6 +38,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/vulcand/oxy/forward"
 	"github.com/vulcand/route"
+	"github.com/philhofer/fwd"
 )
 
 // Magic markers are attached to each packet. The upper 16 bits are used to
@@ -88,6 +89,7 @@ func (r *Redirect) updateRules(rules []policy.AuxRule) {
 	r.Rules = make([]policy.AuxRule, len(rules))
 	copy(r.Rules, rules)
 
+	//TODO change this for AUX kafka
 	for _, v := range r.Rules {
 		r.router.AddRoute(v.Expr, v)
 	}
@@ -158,7 +160,7 @@ func (p *Proxy) allocatePort() (uint16, error) {
 		}
 	}
 }
-
+//proxymap is a bpf map, so we are rewriting the req packet?
 func lookupNewDest(req *http.Request, dport uint16) (uint32, string, error) {
 	ip, port, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
@@ -430,11 +432,13 @@ func listenSocket(address string, mark int) (net.Listener, error) {
 	return net.FileListener(f)
 }
 
+
+
 // CreateOrUpdateRedirect creates or updates a L4 redirect with corresponding
 // proxy configuration. This will allocate a proxy port as required and launch
 // a proxy instance. If the redirect is already in place, only the rules will be
 // updated.
-func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source ProxySource) (*Redirect, error) {
+func (p *Proxy) CreateOrUpdateRedirectHTTP(l4 *policy.L4Filter, id string, source ProxySource) (*Redirect, error) {
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           ciliumDialer,
@@ -516,6 +520,215 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 
 	redir.epID = source.GetID()
 
+	redirect := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		record := &accesslog.LogRecord{
+			Request:           req,
+			Timestamp:         time.Now().UTC().Format(time.RFC3339Nano),
+			NodeAddressInfo:   redir.nodeInfo,
+			TransportProtocol: 6, // TCP's IANA-assigned protocol number
+		}
+
+		if redir.l4.Ingress {
+			record.ObservationPoint = accesslog.Ingress
+		} else {
+			record.ObservationPoint = accesslog.Egress
+		}
+
+		srcIdentity, dstIPPort, err := lookupNewDest(req, to)
+		if err != nil {
+			// FIXME: What do we do here long term?
+			log.Errorf("%s", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			record.Info = fmt.Sprintf("cannot generate url: %s", err)
+			accesslog.Log(record, accesslog.TypeRequest, accesslog.VerdictError, http.StatusBadRequest)
+			return
+		}
+
+		info, version := redir.getSourceInfo(req, policy.NumericIdentity(srcIdentity))
+		record.SourceEndpoint = info
+		record.IPVersion = version
+
+		if srcIdentity != 0 {
+			record.SourceEndpoint.Identity = uint64(srcIdentity)
+		}
+
+		record.DestinationEndpoint = redir.getDestinationInfo(dstIPPort)
+
+		// Validate access to L4/L7 resource
+		p.mutex.Lock()
+		if len(redir.Rules) > 0 {
+			rule, _ := redir.router.Route(req)
+			if rule == nil {
+				http.Error(w, "Access denied", http.StatusForbidden)
+				p.mutex.Unlock()
+				accesslog.Log(record, accesslog.TypeRequest, accesslog.VerdictDenied, http.StatusForbidden)
+				return
+			}
+			ar := rule.(policy.AuxRule)
+			log.Debug("MK in CreateOrUpdateRedirect redir.Rules: ",redir.Rules, "aux rule ar:",ar)
+			log.Debugf("Allowing request based on rule %+v", ar)
+			record.Info = fmt.Sprintf("rule: %+v", ar)
+		}
+		p.mutex.Unlock()
+
+		// Reconstruct original URL used for the request
+		req.URL = generateURL(req, dstIPPort)
+
+		// log valid request
+		accesslog.Log(record, accesslog.TypeRequest, accesslog.VerdictForwarded, http.StatusOK)
+
+		ctx := req.Context()
+		if ctx != nil {
+			marker := redir.GetMagicMark() | int(record.SourceEndpoint.Identity)
+			req = req.WithContext(newIdentityContext(ctx, marker))
+		}
+
+		fwd.ServeHTTP(w, req)
+
+		// log valid response
+		record.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
+		accesslog.Log(record, accesslog.TypeResponse, accesslog.VerdictForwarded, http.StatusOK)
+	})
+
+	redir.server = manners.NewWithServer(&http.Server{
+		Addr:    fmt.Sprintf("[::]:%d", to),
+		Handler: redirect,
+
+		// Set a large timeout for ReadTimeout. This timeout controls
+		// the time that can pass between accepting the connection and
+		// reading the entire request. The default 10 seconds is not
+		// long enough.
+		ReadTimeout: 120 * time.Second,
+	})
+
+	redir.updateRules(l4.L7Rules)
+	p.allocatedPorts[to] = redir
+	p.redirects[id] = redir
+
+	p.mutex.Unlock()
+
+	log.Debugf("Created new proxy instance %+v", redir)
+
+	// The following code up until the go-routine is from manners/sever.go:ListenAndServe()
+	// It was extracted in order to keep the listening on the TCP socket synchronous so that
+	// when policies are regenerated, the port is listening for connections before policy
+	// revisions get bumped for an endpoint.
+	addr := redir.server.Addr
+	if addr == "" {
+		addr = ":http"
+	}
+
+	marker := redir.GetMagicMark()
+
+	// As ingress proxy, all replies to incoming requests must have the
+	// identity of the endpoint we are proxying for
+	if redir.l4.Ingress {
+		marker |= int(source.GetIdentity())
+	}
+
+	// Listen needs to be in the synchronous part of this function to ensure that
+	// the proxy port is never refusing connections.
+	listener, err := listenSocket(addr, marker)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		err := redir.server.Serve(listener)
+		if err != nil {
+			log.Errorf("Unable to listen and serve proxy: %s", err)
+		}
+	}()
+
+	return redir, nil
+}
+
+// CreateOrUpdateRedirect creates or updates a L4 redirect with corresponding
+// proxy configuration. This will allocate a proxy port as required and launch
+// a proxy instance. If the redirect is already in place, only the rules will be
+// updated.
+func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source ProxySource) (*Redirect, error) {
+
+	//Http setup TODO
+	log.Debug("MK in CreateOrUpdateRedirect l4:", l4, " id:", id, " proxysource:", source)
+
+	log.Debug("MK in CreateOrUpdateRedirect l4.l7Parser: ", strings.ToLower(l4.L7Parser))
+	if !(strings.ToLower(l4.L7Parser) == "http" || strings.ToLower(l4.L7Parser) == "kafka") {
+		return nil, fmt.Errorf("unknown L7 protocol \"%s\"", l4.L7Parser)
+	}
+
+	if l4.L7Parser == "http" {
+		for _, r := range l4.L7Rules {
+			log.Debug("MK in CreateOrUpdateRedirect L7Rules loop r:", r)
+			// TODO... check if kafka or http and switch check if valid expression accordingly.
+			if !route.IsValid(r.Expr) {
+				return nil, fmt.Errorf("invalid filter expression: %s", r.Expr)
+			}
+		}
+	} else { //kafka switch instead.
+		for _, r := range l4.L7Rules {
+			log.Debug("MK in CreateOrUpdateRedirect L7Rules loop r:", r)
+			// TODO... check if kafka or http and switch check if valid expression accordingly.
+			/*if !KafkaIsValid(r.Expr) {
+				return nil, fmt.Errorf("invalid filter expression: %s", r.Expr)
+			}*/
+		}
+	}
+
+	gcOnce.Do(func() {
+		if lf := viper.GetString("access-log"); lf != "" {
+			if err := accesslog.OpenLogfile(lf); err != nil {
+				log.WithFields(log.Fields{
+					accesslog.FieldFilePath: lf,
+				}).WithError(err).Warning("Cannot open L7 access log")
+			}
+		}
+
+		if labels := viper.GetStringSlice("agent-labels"); len(labels) != 0 {
+			accesslog.SetMetadata(labels)
+		}
+
+		go func() {
+			for {
+				time.Sleep(time.Duration(10) * time.Second)
+				if deleted := GC(); deleted > 0 {
+					log.Debugf("Evicted %d entries from proxy table", deleted)
+				}
+			}
+		}()
+	})
+
+	p.mutex.Lock()
+
+	if r, ok := p.redirects[id]; ok {
+		r.updateRules(l4.L7Rules) //TODO??
+		log.Debugf("updated existing proxy instance %+v", r)
+		p.mutex.Unlock()
+		return r, nil
+	}
+
+	to, err := p.allocatePort()
+	if err != nil {
+		p.mutex.Unlock()
+		return nil, err
+	}
+
+	redir := &Redirect{
+		id:       id,
+		FromPort: uint16(l4.Port),
+		ToPort:   to,
+		source:   source,
+		router:   route.New(),  //TODO?
+		l4:       *l4,
+		nodeInfo: accesslog.NodeAddressInfo{
+			IPv4: nodeaddress.GetExternalIPv4().String(),
+			IPv6: nodeaddress.GetIPv6().String(),
+		},
+	}
+
+	redir.epID = source.GetID()
+
+	// Datapath setup inside control setup.
 	redirect := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		record := &accesslog.LogRecord{
 			Request:           req,

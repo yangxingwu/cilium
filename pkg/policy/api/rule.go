@@ -212,7 +212,6 @@ type L7Rules struct {
 	//
 	// +optional
 	Kafka []PortRuleKafka `json:"kafka,omitempty"`
-
 }
 
 // PortRuleHTTP is a list of HTTP protocol constraints. All fields are
@@ -267,7 +266,15 @@ type PortRuleKafka struct {
 	// POSIX regexp; TODO: or range of integers?
 	ApiVersion string `json:"apiVersion,omitempty"`
 
-	Topic KafkaTopicRule `json:"topic,omitempty"`
+	Topic string `json:"topic,omitempty"`
+
+	// Method is an extended POSIX regex matched against the method of a
+	// request, e.g. "Produce", "Fetch", "CreateTopic", "DeleteTopic", ...
+	//
+	// If omitted or empty, all methods are allowed.
+	//
+	// +optional
+	ApiKey string `json:"method,omitempty"`
 
 	// TODO: Define which messages are actually matched when this is true.
 	Admin bool `json:"admin,omitempty"`
@@ -275,13 +282,14 @@ type PortRuleKafka struct {
 
 type KafkaTopicRule struct {
 	// POSIX regexp
-	Topic   string `json:"topic,omitempty"`
-	Produce bool   `json:"produce,omitempty"`
-	Fetch   bool   `json:"fetch,omitempty"`
-	Create  bool   `json:"create,omitempty"`
-	Delete  bool   `json:"delete,omitempty"`
+	Topic string `json:"topic,omitempty"`
+	/*
+		Produce bool   `json:"produce,omitempty"`
+		Fetch   bool   `json:"fetch,omitempty"`
+		Create  bool   `json:"create,omitempty"`
+		Delete  bool   `json:"delete,omitempty"`
+	*/
 }
-
 
 /*
  Example:
@@ -291,4 +299,4 @@ type KafkaTopicRule struct {
 ]}
 ]
 
- */
+*/
