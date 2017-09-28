@@ -139,7 +139,7 @@ func NewPutEndpointIDHandler(d *Daemon) PutEndpointIDHandler {
 func (h *putEndpointID) Handle(params PutEndpointIDParams) middleware.Responder {
 	log.Debugf("PUT /endpoint/{id} request: %+v", params)
 
-	log.Debug("MK in putEndpointID Handle with params:",params)
+	log.Debug("MK in putEndpointID Handle with params:", params)
 	epTemplate := params.Endpoint
 	if n, err := endpoint.ParseCiliumID(params.ID); err != nil {
 		return apierror.Error(PutEndpointIDInvalidCode, err)

@@ -77,7 +77,7 @@ func (e EgressRule) Validate() error {
 // Validate validates a port policy rule
 // TODO validate that L7Rules has *either* HTTP or Kafka defined.
 func (pr PortRule) Validate() error {
-	log.Debug("MK in PortRule Validate with L7Rules:",pr.Rules)
+	log.Debug("MK in PortRule Validate with L7Rules:", pr.Rules)
 	if len(pr.Ports) > maxPorts {
 		return fmt.Errorf("too many ports, the max is %d", maxPorts)
 	}

@@ -50,7 +50,7 @@ func (e *Endpoint) writeL4Map(fw *bufio.Writer, owner Owner, m policy.L4PolicyMa
 	array := ""
 	index := 0
 
-	log.Debug("MK in writeL4Map policy.map: ",m, " owner:",owner, " config:",config)
+	log.Debug("MK in writeL4Map policy.map: ", m, " owner:", owner, " config:", config)
 	for _, l4 := range m {
 		// Represents struct l4_allow in bpf/lib/l4.h
 		protoNum, err := u8proto.ParseProtocol(l4.Protocol)
@@ -90,7 +90,7 @@ func (e *Endpoint) writeL4Map(fw *bufio.Writer, owner Owner, m policy.L4PolicyMa
 }
 
 func (e *Endpoint) writeL4Policy(fw *bufio.Writer, owner Owner) error {
-	log.Debug("MK in writeL4Policy e.consumable: ",e.Consumable)
+	log.Debug("MK in writeL4Policy e.consumable: ", e.Consumable)
 	if e.Consumable == nil {
 		return nil
 	}
@@ -102,7 +102,7 @@ func (e *Endpoint) writeL4Policy(fw *bufio.Writer, owner Owner) error {
 
 	l4policy := e.Consumable.L4Policy
 
-	log.Debug("MK in writeL4Policy e.Consumable.L4Policy: ",e.Consumable.L4Policy)
+	log.Debug("MK in writeL4Policy e.Consumable.L4Policy: ", e.Consumable.L4Policy)
 	if err := e.writeL4Map(fw, owner, l4policy.Ingress, "CFG_L4_INGRESS"); err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func (e *Endpoint) runInit(libdir, rundir, epdir, debug string) error {
 // specified endpoint.
 func (e *Endpoint) regenerateBPF(owner Owner, epdir string) error {
 	var err error
-	log.Debug("MK in regenerateBPF for owner:",owner, " epdir:",epdir)
+	log.Debug("MK in regenerateBPF for owner:", owner, " epdir:", epdir)
 
 	// Make sure that owner is not compiling base programs while we are
 	// regenerating an endpoint.

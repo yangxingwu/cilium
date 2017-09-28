@@ -71,7 +71,7 @@ func CreateL4Filter(rule api.PortRule, port api.PortProtocol, direction string, 
 
 		//switch TODO
 		//if l7rules.
-		if rule.Rules.HTTP {
+		if rule.Rules.HTTP != nil {
 			for _, h := range rule.Rules.HTTP {
 				r := AuxRule{}
 				r.L7type = "http"

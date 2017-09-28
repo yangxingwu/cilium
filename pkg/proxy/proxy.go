@@ -34,11 +34,11 @@ import (
 	"github.com/cilium/cilium/pkg/proxy/accesslog"
 
 	"github.com/braintree/manners"
+	//"github.com/philhofer/fwd"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/vulcand/oxy/forward"
 	"github.com/vulcand/route"
-	"github.com/philhofer/fwd"
 )
 
 // Magic markers are attached to each packet. The upper 16 bits are used to
@@ -160,6 +160,7 @@ func (p *Proxy) allocatePort() (uint16, error) {
 		}
 	}
 }
+
 //proxymap is a bpf map, so we are rewriting the req packet?
 func lookupNewDest(req *http.Request, dport uint16) (uint32, string, error) {
 	ip, port, err := net.SplitHostPort(req.RemoteAddr)
@@ -167,7 +168,7 @@ func lookupNewDest(req *http.Request, dport uint16) (uint32, string, error) {
 		return 0, "", fmt.Errorf("invalid remote address: %s", err)
 	}
 
-	log.Debug("MK in lookupNewDest with http req: ",req, " dport: ",dport)
+	log.Debug("MK in lookupNewDest with http req: ", req, " dport: ", dport)
 	pIP := net.ParseIP(ip)
 	if pIP == nil {
 		return 0, "", fmt.Errorf("unable to parse IP %s", ip)
@@ -432,8 +433,6 @@ func listenSocket(address string, mark int) (net.Listener, error) {
 	return net.FileListener(f)
 }
 
-
-
 // CreateOrUpdateRedirect creates or updates a L4 redirect with corresponding
 // proxy configuration. This will allocate a proxy port as required and launch
 // a proxy instance. If the redirect is already in place, only the rules will be
@@ -454,13 +453,13 @@ func (p *Proxy) CreateOrUpdateRedirectHTTP(l4 *policy.L4Filter, id string, sourc
 		return nil, err
 	}
 
-	log.Debug("MK in CreateOrUpdateRedirect l4.l7Parser: ",strings.ToLower(l4.L7Parser))
+	log.Debug("MK in CreateOrUpdateRedirect l4.l7Parser: ", strings.ToLower(l4.L7Parser))
 	if !(strings.ToLower(l4.L7Parser) == "http" || strings.ToLower(l4.L7Parser) == "kafka") {
 		return nil, fmt.Errorf("unknown L7 protocol \"%s\"", l4.L7Parser)
 	}
 
 	for _, r := range l4.L7Rules {
-		log.Debug("MK in CreateOrUpdateRedirect L7Rules loop r:",r)
+		log.Debug("MK in CreateOrUpdateRedirect L7Rules loop r:", r)
 		// TODO... check if kafka or http and switch check if valid expression accordingly.
 		if !route.IsValid(r.Expr) {
 			return nil, fmt.Errorf("invalid filter expression: %s", r.Expr)
@@ -565,7 +564,7 @@ func (p *Proxy) CreateOrUpdateRedirectHTTP(l4 *policy.L4Filter, id string, sourc
 				return
 			}
 			ar := rule.(policy.AuxRule)
-			log.Debug("MK in CreateOrUpdateRedirect redir.Rules: ",redir.Rules, "aux rule ar:",ar)
+			log.Debug("MK in CreateOrUpdateRedirect redir.Rules: ", redir.Rules, "aux rule ar:", ar)
 			log.Debugf("Allowing request based on rule %+v", ar)
 			record.Info = fmt.Sprintf("rule: %+v", ar)
 		}
@@ -718,7 +717,7 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 		FromPort: uint16(l4.Port),
 		ToPort:   to,
 		source:   source,
-		router:   route.New(),  //TODO?
+		router:   route.New(), //TODO?
 		l4:       *l4,
 		nodeInfo: accesslog.NodeAddressInfo{
 			IPv4: nodeaddress.GetExternalIPv4().String(),
@@ -774,7 +773,7 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 				return
 			}
 			ar := rule.(policy.AuxRule)
-			log.Debug("MK in CreateOrUpdateRedirect redir.Rules: ",redir.Rules, "aux rule ar:",ar)
+			log.Debug("MK in CreateOrUpdateRedirect redir.Rules: ", redir.Rules, "aux rule ar:", ar)
 			log.Debugf("Allowing request based on rule %+v", ar)
 			record.Info = fmt.Sprintf("rule: %+v", ar)
 		}
@@ -792,7 +791,7 @@ func (p *Proxy) CreateOrUpdateRedirect(l4 *policy.L4Filter, id string, source Pr
 			req = req.WithContext(newIdentityContext(ctx, marker))
 		}
 
-		fwd.ServeHTTP(w, req)
+		//fwd.ServeHTTP(w, req)
 
 		// log valid response
 		record.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)

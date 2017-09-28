@@ -209,7 +209,7 @@ func (d *Daemon) handleCreateContainer(id string, retry bool) {
 
 	maxTries := 5
 
-	log.Debug("MK in handleCreateContainer for id: ",id)
+	log.Debug("MK in handleCreateContainer for id: ", id)
 	for try := 1; try <= maxTries; try++ {
 		if try > 1 {
 			if retry {

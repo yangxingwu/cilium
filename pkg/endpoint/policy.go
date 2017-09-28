@@ -104,7 +104,7 @@ func (e *Endpoint) ProxyID(l4 *policy.L4Filter) string {
 }
 
 func (e *Endpoint) addRedirect(owner Owner, l4 *policy.L4Filter) (uint16, error) {
-	log.Debug("MK in  addRedirect calling UpdateProxyRedirect owner:", owner, " l4:",l4)
+	log.Debug("MK in  addRedirect calling UpdateProxyRedirect owner:", owner, " l4:", l4)
 	return owner.UpdateProxyRedirect(e, l4)
 }
 

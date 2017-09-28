@@ -129,7 +129,7 @@ type Daemon struct {
 // UpdateProxyRedirect updates the redirect rules in the proxy for a particular
 // endpoint using the provided L4 filter. Returns the allocated proxy port
 func (d *Daemon) UpdateProxyRedirect(e *endpoint.Endpoint, l4 *policy.L4Filter) (uint16, error) {
-	log.Debug("MK in UpdateProxyRedirect d.l7Proxy: ",d.l7Proxy, "l4filter:",l4)
+	log.Debug("MK in UpdateProxyRedirect d.l7Proxy: ", d.l7Proxy, "l4filter:", l4)
 	if d.l7Proxy == nil {
 		return 0, fmt.Errorf("can't redirect, proxy disabled")
 	}
@@ -230,7 +230,7 @@ func (d *Daemon) GetBpfDir() string {
 
 // GetPolicyRepository returns the policy repository of the daemon
 func (d *Daemon) GetPolicyRepository() *policy.Repository {
-	log.Debug("MK in GetPolicyRepository d.policy:",d.policy)
+	log.Debug("MK in GetPolicyRepository d.policy:", d.policy)
 	return d.policy
 }
 

@@ -379,7 +379,7 @@ func L3n4Addr2ServiceKey(l3n4Addr types.L3n4AddrID) ServiceKey {
 
 // LBSVC2ServiceKeynValue transforms the SVC Cilium type into a bpf SVC type.
 func LBSVC2ServiceKeynValue(svc types.LBSVC) (ServiceKey, []ServiceValue, error) {
-	log.Debug("MK in LBSVC2ServiceKeynValue  svc:",svc)
+	log.Debug("MK in LBSVC2ServiceKeynValue  svc:", svc)
 	log.Debugf("converting Cilium load-balancer service (frontend: %s, "+
 		"backend(s): %v) into BPF service", svc.FE.String(), svc.BES)
 	fe := L3n4Addr2ServiceKey(svc.FE)

@@ -42,11 +42,10 @@ func (r *rule) validate() error {
 	return nil
 }
 
-
 //TODO this is across all the ports of the entire cluster..
 func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir string, proto string, resMap L4PolicyMap) int {
 	fmt := p.Port + "/" + proto
-	log.Debug("MK in mergeL4Port with api.PortRule: ",r," api.PortProtocol:", p," dir:", dir, " proto:",proto, " L4PolicyMap:",resMap )
+	log.Debug("MK in mergeL4Port with api.PortRule: ", r, " api.PortProtocol:", p, " dir:", dir, " proto:", proto, " L4PolicyMap:", resMap)
 
 	v, ok := resMap[fmt]
 	if !ok {
@@ -55,7 +54,7 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 	}
 	l4Filter := CreateL4Filter(r, p, dir, proto)
 	if l4Filter.L7Parser != "" { ////TODO >>>>>>>>>>> here here,,, errflag = true if port = 80 , http and then port = 80 = kafka by 2 different yamls..
-		log.Debug("MK in mergeL4Port l4Filter.L7Parser:",l4Filter.L7Parser)
+		log.Debug("MK in mergeL4Port l4Filter.L7Parser:", l4Filter.L7Parser)
 		v.L7Parser = l4Filter.L7Parser
 	}
 	if l4Filter.L7RedirectPort != 0 {
@@ -68,7 +67,7 @@ func mergeL4Port(ctx *SearchContext, r api.PortRule, p api.PortProtocol, dir str
 
 func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4PolicyMap) int {
 	found := 0
-	log.Debug("MK in mergeL4 with portRules: ",portRules, " resmap:",resMap, " dir:",dir)
+	log.Debug("MK in mergeL4 with portRules: ", portRules, " resmap:", resMap, " dir:", dir)
 
 	// TODO support Policy trace too for kafka.
 	for _, r := range portRules {
@@ -100,7 +99,7 @@ func mergeL4(ctx *SearchContext, dir string, portRules []api.PortRule, resMap L4
 }
 
 func (r *rule) resolveL4Policy(ctx *SearchContext, state *traceState, result *L4Policy) *L4Policy {
-	log.Debug("MK in resolveL4Policy state:",state, " result:",result)
+	log.Debug("MK in resolveL4Policy state:", state, " result:", result)
 	if !r.EndpointSelector.Matches(ctx.To) {
 		ctx.PolicyTraceVerbose("  Rule %d %s: no match\n", state.ruleID, r)
 		return nil
