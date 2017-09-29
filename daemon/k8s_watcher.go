@@ -437,7 +437,6 @@ func (d *Daemon) serviceDelFn(obj interface{}) {
 }
 
 func (d *Daemon) endpointAddFn(obj interface{}) {
-	//log.Debug("MK in endpointAddFn")
 	ep, ok := obj.(*v1.Endpoints)
 	if !ok {
 		return
