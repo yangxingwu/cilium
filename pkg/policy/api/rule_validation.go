@@ -45,7 +45,12 @@ func (r Rule) Validate() error {
 // Validate validates an ingress policy rule
 func (i IngressRule) Validate() error {
 	log.Debug("MK in Validate IngressRule")
+
+	log.Debug("MK in Validate IngressRule i:", i)
+
+	log.Debug("MK in Validate IngressRule i.ToPorts:", i.ToPorts)
 	for _, p := range i.ToPorts {
+		log.Debug("MK in Validate IngressRule i.ToPorts:", i.ToPorts)
 		if err := p.Validate(); err != nil {
 			log.Debug("MK in Validate IngressRule ToPorts returning err:", err)
 			return err
@@ -83,7 +88,11 @@ func (e EgressRule) Validate() error {
 // Validate validates a port policy rule
 // TODO validate that L7Rules has *either* HTTP or Kafka defined.
 func (pr PortRule) Validate() error {
-	log.Debug("MK in PortRule Validate with L7RulesKafka:", pr.Rules.Kafka)
+	if pr.Rules != nil {
+		log.Debug("MK in PortRule Validate with L7RulesKafka:", pr.Rules.Kafka)
+	} else {
+		log.Debug("MK in PortRule Validate with pr.Rules == nil")
+	}
 	if len(pr.Ports) > maxPorts {
 		log.Debug("MK in PortRule Validate error oo many ports, the max is %d", maxPorts)
 		return fmt.Errorf("too many ports, the max is %d", maxPorts)
@@ -100,6 +109,7 @@ func (pr PortRule) Validate() error {
 
 // Validate validates a port/protocol pair
 func (pp PortProtocol) Validate() error {
+	log.Debug("MK in PortProtocol Validate ")
 	if pp.Port == "" {
 		return fmt.Errorf("Port must be specified")
 	}
