@@ -274,7 +274,7 @@ type PortRuleKafka struct {
 	// If omitted or empty, all methods are allowed.
 	//
 	// +optional
-	ApiKey string `json:"method,omitempty"`
+	ApiKey string `json:"apikey,omitempty"`
 
 	// TODO: Define which messages are actually matched when this is true.
 	Admin bool `json:"admin,omitempty"`
