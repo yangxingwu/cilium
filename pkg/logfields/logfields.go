@@ -27,4 +27,7 @@ const (
 
 	// Identity is the identifier of a security identity
 	Identity = "identity"
+
+	// Subsys is set to the subsystem where the log message is being emitted
+	Subsys = "subsys"
 )

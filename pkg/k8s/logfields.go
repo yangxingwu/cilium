@@ -26,6 +26,5 @@ const (
 	fieldNodeName = "nodeName"
 
 	// fieldSubsys is set to subsysKubernetes on all Kubernetes logging messages
-	fieldSubsys      = "subsys"
 	subsysKubernetes = "kubernetes"
 )
