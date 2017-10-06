@@ -25,8 +25,246 @@ import (
 	"github.com/cilium/cilium/pkg/policy"
 	"github.com/cilium/cilium/pkg/proxy/accesslog"
 
+	"encoding/binary"
 	log "github.com/sirupsen/logrus"
+	//"github.com/vulcand/route"
+	//"net/http"
+	//"sort"
+	"regexp"
+	"strings"
+	"sync"
 )
+
+/*
+ RequestMessage => ApiKey ApiVersion CorrelationId ClientId RequestMessage
+  ApiKey => int16
+  ApiVersion => int16
+  CorrelationId => int32
+  ClientId => string
+  RequestMessage => MetadataRequest | ProduceRequest | FetchRequest | OffsetRequest | OffsetCommitRequest | OffsetFetchRequest
+*/
+
+type KafKaRequestHeader struct {
+	// Size of the request
+	Size int32
+	// ID of the API (e.g. produce, fetch, metadata)
+	APIKey int16
+	// Version of the API to use
+	APIVersion int16
+	// User defined ID to correlate requests between server and client
+	CorrelationID int32
+	// Size of the Client ID
+	ClientID string
+}
+
+/*
+	Response => CorrelationId ResponseMessage
+	CorrelationId => int32
+	ResponseMessage => MetadataResponse | ProduceResponse | FetchResponse | OffsetResponse | OffsetCommitResponse | OffsetFetchResponse
+*/
+
+type KafKaResponseHeader struct {
+	// Size of the response
+	Size          int32
+	CorrelationID int32
+	//Body          ResponseBody
+}
+
+/*
+v0, v1 (supported in 0.9.0 or later) and v2 (supported in 0.10.0 or later)
+ProduceRequest => RequiredAcks Timeout [TopicName [Partition MessageSetSize MessageSet]]
+  RequiredAcks => int16
+  Timeout => int32
+  Partition => int32
+  MessageSetSize => int32
+*/
+type Data struct {
+	Partition int32
+	RecordSet []byte
+}
+
+type TopicData struct {
+	Topic string
+	Data  []*Data
+}
+
+type ProduceRequest struct {
+	Acks      int16
+	Timeout   int32
+	TopicData []*TopicData
+}
+
+/*
+ FetchRequest => ReplicaId MaxWaitTime MinBytes [TopicName [Partition FetchOffset MaxBytes]]
+  ReplicaId => int32
+  MaxWaitTime => int32
+  MinBytes => int32
+  TopicName => string
+  Partition => int32
+  FetchOffset => int64
+  MaxBytes => int32
+*/
+
+type FetchPartition struct {
+	Partition   int32
+	FetchOffset int64
+	MaxBytes    int32
+}
+
+type FetchTopic struct {
+	Topic      string
+	Partitions []*FetchPartition
+}
+
+type FetchRequest struct {
+	ReplicaID   int32
+	MaxWaitTime int32
+	MinBytes    int32
+	Topics      []*FetchTopic
+}
+
+// KafkaAPIKeyMap is the map of all allowed kafka API keys
+// with the key values.
+// Reference: https://kafka.apache.org/protocol#protocol_api_keys
+var KafkaAPIKeyMap = map[string]int{
+	"produce":              0,  /* Produce */
+	"fetch":                1,  /* Fetch */
+	"offsets":              2,  /* Offsets */
+	"metadata":             3,  /* Metadata */
+	"leaderandisr":         4,  /* LeaderAndIsr */
+	"stopreplica":          5,  /* StopReplica */
+	"updatemetadata":       6,  /* UpdateMetadata */
+	"controlledshutdown":   7,  /* ControlledShutdown */
+	"offsetcommit":         8,  /* OffsetCommit */
+	"offsetfetch":          9,  /* OffsetFetch */
+	"findcoordinator":      10, /* FindCoordinator */
+	"joingroup":            11, /* JoinGroup */
+	"heartbeat":            12, /* Heartbeat */
+	"leavegroup":           13, /* LeaveGroup */
+	"syncgroup":            14, /* SyncGroup */
+	"describegroups":       15, /* DescribeGroups */
+	"listgroups":           16, /* ListGroups */
+	"saslhandshake":        17, /* SaslHandshake */
+	"apiversions":          18, /* ApiVersions */
+	"createtopics":         19, /* CreateTopics */
+	"deletetopics":         20, /* DeleteTopics */
+	"deleterecords":        21, /* DeleteRecords */
+	"initproducerid":       22, /* InitProducerId */
+	"offsetforleaderepoch": 23, /* OffsetForLeaderEpoch */
+	"addpartitionstotxn":   24, /* AddPartitionsToTxn */
+	"addoffsetstotxn":      25, /* AddOffsetsToTxn */
+	"endtxn":               26, /* EndTxn */
+	"writetxnmarkers":      27, /* WriteTxnMarkers */
+	"txnoffsetcommit":      28, /* TxnOffsetCommit */
+	"describeacls":         29, /* DescribeAcls */
+	"createacls":           30, /* CreateAcls */
+	"deleteacls":           31, /* DeleteAcls */
+	"describeconfigs":      32, /* DescribeConfigs */
+	"alterconfigs":         33, /* AlterConfigs */
+}
+
+// KafkaMaxTopicLen is the maximum character len of a topic.
+// Older Kafka versions had longer topic lengths of 255, in Kafka 0.10 version
+// the length was changed from 255 to 249. For compatibility reasons we are
+// using 255
+const (
+	KafkaMaxTopicLen = 255
+)
+
+// KafkaTopicValidChar is a one-time regex generation of all allowed characters
+// in kafka topic name.
+var KafkaTopicValidChar = regexp.MustCompile(`^[a-zA-Z0-9\\._\\-]+$`)
+
+func translateKafkaPolicyRules(l4 *policy.L4Filter) ([]string, error) {
+	var l7rules []string
+
+	log.Debug("MK in translateKafkaPolicyRules ")
+	for _, k := range l4.L7Rules.Kafka {
+		var r string
+
+		if k.APIVersion != "" {
+			r = "APIVersion(\"" + k.APIVersion + "\")"
+		}
+
+		if k.APIKey != "" {
+			if r != "" {
+				r += " && "
+			}
+			r += "APIKey(\"" + string(KafkaAPIKeyMap[strings.ToLower(k.APIKey)]) + "\")"
+		}
+
+		if k.Topic != "" {
+			if r != "" {
+				r += " && "
+			}
+			r += "Topic(\"" + k.Topic + "\")"
+		}
+		log.Debug("MK in translateKafkaPolicyRules loop rule:", r)
+		l7rules = append(l7rules, r)
+	}
+
+	return l7rules, nil
+}
+
+type kafkaRouter struct {
+	mutex  *sync.RWMutex
+	routes map[string]int32
+}
+
+// Router implements kafka request routing and operations.
+type KafkaRouter interface {
+	// GetRoute returns a route by a given expression,
+	// returns nil if expression is not found
+	GetRoute(string) int32
+
+	// AddRoute adds a route to match by expression,
+	// returns error if the expression already defined,
+	// or route expression is incorrect
+	AddRoute(string) error
+
+	// RemoveRoute removes a route for a given expression
+	RemoveRoute(string) error
+}
+
+// New creates a new Router instance
+func New() KafkaRouter {
+	return &kafkaRouter{
+		mutex:  &sync.RWMutex{},
+		routes: make(map[string]int32),
+	}
+}
+
+func (e *kafkaRouter) GetRoute(expr string) int32 {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+
+	res, ok := e.routes[expr]
+	if ok {
+		return res
+	}
+	return 0
+}
+
+func (e *kafkaRouter) AddRoute(expr string) error {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+
+	if _, ok := e.routes[expr]; ok {
+		log.Debug("Expression already exists :", expr)
+		return nil
+	}
+
+	e.routes[expr] = 1
+	return nil
+}
+
+func (e *kafkaRouter) RemoveRoute(expr string) error {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+
+	delete(e.routes, expr)
+	return nil
+}
 
 // KafkaRedirect implements the Redirect interface for an l7 proxy
 type KafkaRedirect struct {
@@ -36,18 +274,29 @@ type KafkaRedirect struct {
 	source     ProxySource
 	ingress    bool
 	nodeInfo   accesslog.NodeAddressInfo
+	router     KafkaRouter
 
 	mutex lock.RWMutex // protecting the fields below
 	rules []string
 }
 
-// ToPort returns the redirect port of an OxyRedirect
+// ToPort returns the redirect port of an KafkaRedirect
 func (k *KafkaRedirect) ToPort() uint16 {
 	return k.listenPort
 }
 
 func (k *KafkaRedirect) updateRules(rules []string) {
-	// FIXME
+	log.Debug("MK in updateRules ")
+	for _, v := range k.rules {
+		k.router.RemoveRoute(v)
+	}
+
+	k.rules = make([]string, len(rules))
+	copy(k.rules, rules)
+
+	for _, v := range k.rules {
+		k.router.AddRoute(v)
+	}
 }
 
 // createKafkaRedirect creates a redirect with corresponding proxy
@@ -69,6 +318,12 @@ func createKafkaRedirect(l4 *policy.L4Filter, id string, source ProxySource, lis
 	}
 
 	redir.epID = source.GetID()
+
+	l7rules, err := translateKafkaPolicyRules(l4)
+	if err != nil {
+		return nil, err
+	}
+	redir.updateRules(l7rules)
 
 	marker := GetMagicMark(redir.ingress)
 
@@ -102,8 +357,92 @@ func createKafkaRedirect(l4 *policy.L4Filter, id string, source ProxySource, lis
 	return redir, nil
 }
 
+/*
+type KafKaRequestHeader struct {
+	// Size of the request
+	Size int32
+	// ID of the API (e.g. produce, fetch, metadata)
+	APIKey int16
+	// Version of the API to use
+	APIVersion int16
+	// User defined ID to correlate requests between server and client
+	CorrelationID int32
+	// Size of the Client ID
+	ClientID string
+}
+
+
+type TopicData struct {
+	Topic string
+	Data  []*Data
+}
+
+type ProduceRequest struct {
+	Acks      int16
+	Timeout   int32
+	TopicData []*TopicData
+}
+
+
+ FetchRequest => ReplicaId MaxWaitTime MinBytes [TopicName [Partition FetchOffset MaxBytes]]
+  ReplicaId => int32
+  MaxWaitTime => int32
+  MinBytes => int32
+  TopicName => string
+  Partition => int32
+  FetchOffset => int64
+  MaxBytes => int32
+
+
+type FetchPartition struct {
+	Partition   int32
+	FetchOffset int64
+	MaxBytes    int32
+}
+
+type FetchTopic struct {
+	Topic      string
+	Partitions []*FetchPartition
+}
+
+type FetchRequest struct {
+	ReplicaID   int32
+	MaxWaitTime int32
+	MinBytes    int32
+	Topics      []*FetchTopic
+}
+
+*/
+func filterIngress(b []byte, redir *KafkaRedirect) {
+	// Parse size
+	size := binary.BigEndian.Uint32(b)
+	log.Debug("filterIngress size:", size)
+	apiKey := binary.BigEndian.Uint16(b[4:])
+	log.Debug("filterIngress apiKey:", apiKey)
+
+	apiVersion := binary.BigEndian.Uint16(b[6:])
+	log.Debug("filterIngress apiVersion:", apiVersion)
+	correlationID := binary.BigEndian.Uint16(b[8:])
+	log.Debug("filterIngress correlationID:", correlationID)
+	clientID := string(b[12:])
+	//clientID := binary.BigEndian.String(b[12:])
+
+	topic := ""
+	if apiKey == 1 || apiKey == 2 {
+		//producer / fetch request
+		if apiKey == 1 {
+			topic = string((b[(12 + len(clientID) + 6):]))
+		} else {
+			topic = string((b[(12 + len(clientID) + 12):]))
+		}
+		log.Debug("filterIngress topic:", topic)
+	}
+
+}
+
 func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 	addr := rxConn.RemoteAddr()
+	log.Debug("MK in kafka handleConnection ")
 	if addr == nil {
 		log.Warning("RemoteAddr() is nil")
 		return
@@ -132,7 +471,8 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 	var timer *time.Timer
 
 	// write to dst what it reads from src
-	var pipe = func(src, dst net.Conn, filter func(b *[]byte)) {
+	//var pipe = func(src, dst net.Conn, filter func(b *[]byte, kredir *KafkaRedirect)) {
+	var pipe = func(src, dst net.Conn, filter func(b []byte, kredir *KafkaRedirect)) {
 		defer func() {
 			// if it is the first pipe to end...
 			if v := atomic.AddInt32(&pipeDone, 1); v == 1 {
@@ -160,7 +500,8 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 			b := buff[:n]
 
 			if filter != nil {
-				filter(&b)
+				//filter(&b, k)
+				filter(b, k)
 			}
 
 			n, err = dst.Write(b)
@@ -170,14 +511,20 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 		}
 	}
 
-	go pipe(rxConn, txConn, nil)
-	go pipe(txConn, rxConn, nil)
+	go pipe(rxConn, txConn, filterIngress) // request forwarding
+	go pipe(txConn, rxConn, nil)           // response from remote
 }
 
 // UpdateRules replaces old l7 rules of a redirect with new ones.
 func (k *KafkaRedirect) UpdateRules(l4 *policy.L4Filter) error {
-	// FIXME
-	return nil
+	l7rules, err := translateKafkaPolicyRules(l4)
+	log.Debug("MK in UpdateRules err from translateKafkaPolicyRules:", err)
+	if err == nil {
+		k.mutex.Lock()
+		k.updateRules(l7rules)
+		k.mutex.Unlock()
+	}
+	return err
 }
 
 // Close the redirect.

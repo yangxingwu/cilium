@@ -16,6 +16,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/cilium/cilium/pkg/proxy"
 	"net"
 	"strconv"
 	"strings"
@@ -87,7 +88,7 @@ func (e EgressRule) Validate() error {
 // wildcard and prefix/suffix later on.
 func (kr PortRuleKafka) Validate() error {
 	if len(kr.APIKey) > 0 {
-		if _, ok := KafkaAPIKeyMap[strings.ToLower(kr.APIKey)]; ok == false {
+		if _, ok := proxy.KafkaAPIKeyMap[strings.ToLower(kr.APIKey)]; ok == false {
 			return fmt.Errorf("invalid Kafka APIKey :%q", kr.APIKey)
 		}
 	}
@@ -102,13 +103,13 @@ func (kr PortRuleKafka) Validate() error {
 	}
 
 	if len(kr.Topic) > 0 {
-		if len(kr.Topic) > KafkaMaxTopicLen {
+		if len(kr.Topic) > proxy.KafkaMaxTopicLen {
 			return fmt.Errorf("kafka topic exceeds maximum len of %d",
-				KafkaMaxTopicLen)
+				proxy.KafkaMaxTopicLen)
 		}
 		// This check allows suffix and prefix matching
 		// for topic.
-		if KafkaTopicValidChar.MatchString(kr.Topic) == false {
+		if proxy.KafkaTopicValidChar.MatchString(kr.Topic) == false {
 			return fmt.Errorf("invalid Kafka Topic name")
 		}
 	}

@@ -49,7 +49,8 @@ const (
 	ProxyKindEnvoy = "envoy"
 )
 
-// Redirect is the generic proxy redirect interface that each proxy redirect type must export
+// Redirect is the generic proxy redirect interface that each proxy redirect
+// type must export
 type Redirect interface {
 	ToPort() uint16
 	UpdateRules(l4 *policy.L4Filter) error
