@@ -27,10 +27,6 @@ import (
 
 	"encoding/binary"
 	log "github.com/sirupsen/logrus"
-	//"github.com/vulcand/route"
-	//"net/http"
-	//"sort"
-	"regexp"
 	"strings"
 	"sync"
 )
@@ -105,24 +101,6 @@ type ProduceRequest struct {
   MaxBytes => int32
 */
 
-type FetchPartition struct {
-	Partition   int32
-	FetchOffset int64
-	MaxBytes    int32
-}
-
-type FetchTopic struct {
-	Topic      string
-	Partitions []*FetchPartition
-}
-
-type FetchRequest struct {
-	ReplicaID   int32
-	MaxWaitTime int32
-	MinBytes    int32
-	Topics      []*FetchTopic
-}
-
 // KafkaAPIKeyMap is the map of all allowed kafka API keys
 // with the key values.
 // Reference: https://kafka.apache.org/protocol#protocol_api_keys
@@ -163,17 +141,23 @@ var KafkaAPIKeyMap = map[string]int{
 	"alterconfigs":         33, /* AlterConfigs */
 }
 
-// KafkaMaxTopicLen is the maximum character len of a topic.
-// Older Kafka versions had longer topic lengths of 255, in Kafka 0.10 version
-// the length was changed from 255 to 249. For compatibility reasons we are
-// using 255
-const (
-	KafkaMaxTopicLen = 255
-)
+type FetchPartition struct {
+	Partition   int32
+	FetchOffset int64
+	MaxBytes    int32
+}
 
-// KafkaTopicValidChar is a one-time regex generation of all allowed characters
-// in kafka topic name.
-var KafkaTopicValidChar = regexp.MustCompile(`^[a-zA-Z0-9\\._\\-]+$`)
+type FetchTopic struct {
+	Topic      string
+	Partitions []*FetchPartition
+}
+
+type FetchRequest struct {
+	ReplicaID   int32
+	MaxWaitTime int32
+	MinBytes    int32
+	Topics      []*FetchTopic
+}
 
 func translateKafkaPolicyRules(l4 *policy.L4Filter) ([]string, error) {
 	var l7rules []string
