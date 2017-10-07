@@ -211,7 +211,7 @@ type KafkaRouter interface {
 }
 
 // New creates a new Router instance
-func New() KafkaRouter {
+func KafkaRouterNew() KafkaRouter {
 	return &kafkaRouter{
 		mutex:  &sync.RWMutex{},
 		routes: make(map[string]int32),
@@ -295,6 +295,7 @@ func createKafkaRedirect(l4 *policy.L4Filter, id string, source ProxySource, lis
 		listenPort: listenPort,
 		source:     source,
 		ingress:    l4.Ingress,
+		router:     KafkaRouterNew(),
 		nodeInfo: accesslog.NodeAddressInfo{
 			IPv4: nodeaddress.GetExternalIPv4().String(),
 			IPv6: nodeaddress.GetIPv6().String(),
