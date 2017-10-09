@@ -399,10 +399,11 @@ type FetchRequest struct {
 }
 
 */
-func filterIngress(bb *[]byte, redir *KafkaRedirect) {
+func filterIngress(b []byte, redir *KafkaRedirect, n int) {
 	// Parse size
-	b := *bb
-	size := binary.BigEndian.Uint32(b)
+	log.Debug("MK in filteringress Dumpstream n is:", n)
+	Dumpstream(n, b)
+	size := binary.BigEndian.Uint32(b[0:])
 	log.Debug("filterIngress size:", size)
 	apiKey := binary.BigEndian.Uint16(b[4:])
 	log.Debug("filterIngress apiKey:", apiKey)
@@ -425,6 +426,14 @@ func filterIngress(bb *[]byte, redir *KafkaRedirect) {
 		log.Debug("filterIngress topic:", topic)
 	}
 
+}
+
+func Dumpstream(n int, buff []byte) {
+	log.Debug("MK in Dumpstream dumping.. n :", n, "::")
+	for i := 0; i < n; i++ {
+		log.Debug("buff[", i, "]:", buff[i])
+		log.Debug(" ")
+	}
 }
 
 func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
@@ -459,7 +468,7 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 
 	// write to dst what it reads from src
 	//var pipe = func(src, dst net.Conn, filter func(b *[]byte, kredir *KafkaRedirect)) {
-	var pipe = func(src, dst net.Conn, filter func(b *[]byte, kredir *KafkaRedirect)) {
+	var pipe = func(src, dst net.Conn, filter func(b []byte, kredir *KafkaRedirect, int n)) {
 		defer func() {
 			// if it is the first pipe to end...
 			if v := atomic.AddInt32(&pipeDone, 1); v == 1 {
@@ -481,14 +490,16 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 		buff := make([]byte, 65535)
 		for {
 			n, err := src.Read(buff)
+			log.Debug("MK in pipe n:", n)
+			Dumpstream(n, buff)
 			if err != nil {
 				return
 			}
 			b := buff[:n]
 
 			if filter != nil {
-				filter(&b, k)
-				//filter(b, k)
+				//filter(&b, k)
+				filter(b, k, n)
 			}
 
 			n, err = dst.Write(b)
