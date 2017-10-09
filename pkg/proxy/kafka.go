@@ -468,7 +468,7 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 
 	// write to dst what it reads from src
 	//var pipe = func(src, dst net.Conn, filter func(b *[]byte, kredir *KafkaRedirect)) {
-	var pipe = func(src, dst net.Conn, filter func(b []byte, kredir *KafkaRedirect, int n)) {
+	var pipe = func(src, dst net.Conn, filter func(b []byte, kredir *KafkaRedirect, num int)) {
 		defer func() {
 			// if it is the first pipe to end...
 			if v := atomic.AddInt32(&pipeDone, 1); v == 1 {
