@@ -61,7 +61,8 @@ type KafKaRequestHeader struct {
 
 type KafKaResponseHeader struct {
 	// Size of the response
-	Size          int32
+	Size int32
+	// User defined ID to correlate requests/responses between server and client
 	CorrelationID int32
 	//Body          ResponseBody
 }
@@ -398,8 +399,9 @@ type FetchRequest struct {
 }
 
 */
-func filterIngress(b []byte, redir *KafkaRedirect) {
+func filterIngress(bb *[]byte, redir *KafkaRedirect) {
 	// Parse size
+	b := *bb
 	size := binary.BigEndian.Uint32(b)
 	log.Debug("filterIngress size:", size)
 	apiKey := binary.BigEndian.Uint16(b[4:])
@@ -457,7 +459,7 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 
 	// write to dst what it reads from src
 	//var pipe = func(src, dst net.Conn, filter func(b *[]byte, kredir *KafkaRedirect)) {
-	var pipe = func(src, dst net.Conn, filter func(b []byte, kredir *KafkaRedirect)) {
+	var pipe = func(src, dst net.Conn, filter func(b *[]byte, kredir *KafkaRedirect)) {
 		defer func() {
 			// if it is the first pipe to end...
 			if v := atomic.AddInt32(&pipeDone, 1); v == 1 {
@@ -485,8 +487,8 @@ func (k *KafkaRedirect) handleConnection(rxConn net.Conn) {
 			b := buff[:n]
 
 			if filter != nil {
-				//filter(&b, k)
-				filter(b, k)
+				filter(&b, k)
+				//filter(b, k)
 			}
 
 			n, err = dst.Write(b)
