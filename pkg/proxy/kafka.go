@@ -431,7 +431,7 @@ func filterIngress(b []byte, redir *KafkaRedirect, n int) {
 func Dumpstream(n int, buff []byte) {
 	log.Debug("MK in Dumpstream dumping.. n :", n, "::")
 	for i := 0; i < n; i++ {
-		log.Debug("buff[", i, "]:", buff[i])
+		log.Debugf("buff[%d] 0x%x", i, buff[i])
 		log.Debug(" ")
 	}
 }
