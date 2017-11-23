@@ -13,13 +13,13 @@ pipeline {
 
     environment {
         PROJ_PATH = "src/github.com/cilium/cilium"
-        MEMORY = "3072"
+        MEMORY = "4096"
         TESTDIR="${WORKSPACE}/${PROJ_PATH}/test"
         GOPATH="${WORKSPACE}"
     }
 
     options {
-        timeout(time: 140, unit: 'MINUTES')
+        timeout(time: 300, unit: 'MINUTES')
         timestamps()
         ansiColor('xterm')
     }
@@ -43,7 +43,7 @@ pipeline {
                 FAILFAST = failFast(env.GIT_BRANCH)
             }
             options {
-                timeout(time: 60, unit: 'MINUTES')
+                timeout(time: 150, unit: 'MINUTES')
             }
             steps {
                 parallel(
@@ -78,7 +78,7 @@ pipeline {
                 FAILFAST = failFast(env.GIT_BRANCH)
             }
             options {
-                timeout(time: 60, unit: 'MINUTES')
+                timeout(time: 150, unit: 'MINUTES')
             }
             steps {
                 parallel(
