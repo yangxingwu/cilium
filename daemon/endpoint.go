@@ -182,7 +182,9 @@ func (h *putEndpointID) Handle(params PutEndpointIDParams) middleware.Responder 
 		}
 	}
 
+	ep.Mutex.RLock()
 	endpointmanager.Insert(ep)
+	ep.Mutex.RUnlock()
 
 	add := labels.NewLabelsFromModel(params.Endpoint.Labels)
 
@@ -457,7 +459,9 @@ func (d *Daemon) EndpointUpdate(id string, opts models.ConfigurationMap) error {
 				return apierror.Error(PatchEndpointIDConfigFailedCode, err)
 			}
 		}
+		ep.Mutex.RLock()
 		endpointmanager.UpdateReferences(ep)
+		ep.Mutex.RUnlock()
 	} else {
 		return apierror.New(PatchEndpointIDConfigNotFoundCode, "endpoint %s not found", id)
 	}
