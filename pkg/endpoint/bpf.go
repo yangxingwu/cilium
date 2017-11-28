@@ -484,7 +484,8 @@ func (e *Endpoint) regenerateBPF(owner Owner, epdir, reason string) error {
 		// Regenerate policy and apply any options resulting in the
 		// policy change.
 		// This also populates e.PolicyMap
-		_, consumersToRm, err := e.regeneratePolicy(owner, nil)
+		var consumersToRm policy.RuleContexts
+		_, consumersToRm, err = e.regeneratePolicy(owner, nil)
 		if err != nil {
 			e.Mutex.Unlock()
 			return fmt.Errorf("Unable to regenerate policy for '%s': %s",
@@ -505,7 +506,8 @@ func (e *Endpoint) regenerateBPF(owner Owner, epdir, reason string) error {
 	epInfoCache := e.createEpInfoCache()
 	if epInfoCache == nil {
 		e.Mutex.Unlock()
-		return fmt.Errorf("Unable to cache endpoint information")
+		err = fmt.Errorf("Unable to cache endpoint information")
+		return err
 	}
 
 	if e.L3Policy != nil {
