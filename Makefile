@@ -1,6 +1,7 @@
 include Makefile.defs
 
-SUBDIRS = envoy plugins bpf cilium daemon monitor cilium-health bugtool
+BUILDDIRS = envoy plugins cilium daemon monitor cilium-health bugtool
+SUBDIRS = $(BUILDDIRS) bpf
 GOFILES ?= $(shell go list ./... | grep -v /vendor/ | grep -v /contrib/ | grep -v /test | grep -v cilium/envoy | grep -v envoy.*api)
 GOLANGVERSION = $(shell go version 2>/dev/null | grep -Eo '(go[0-9].[0-9])')
 GOLANG_SRCFILES=$(shell for pkg in $GOFILES; do find $(pkg) -name *.go -print; done | grep -v /vendor/)
@@ -11,7 +12,7 @@ GOTEST_OPTS = -test.v -check.v
 all: precheck-gofmt build cmdref-check
 	@echo "Build finished."
 
-build: $(SUBDIRS)
+build: $(BUILDDIRS)
 
 $(SUBDIRS): force
 	@ $(MAKE) -C $@ all
