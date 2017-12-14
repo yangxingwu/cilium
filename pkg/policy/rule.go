@@ -58,11 +58,15 @@ func (r *rule) sanitize() error {
 	entities := []api.Entity{}
 
 	ingressEntityCounter := 0
+	log.Debug("MK in sanitize r.Ingress:", r.Ingress)
+	log.Debug("MK in sanitize len(r.Ingress):", len(r.Ingress))
 	for _, rule := range r.Ingress {
 		entities = append(entities, rule.FromEntities...)
 		ingressEntityCounter += len(rule.FromEntities)
 	}
 
+	log.Debug("MK in sanitize r.Egress:", r.Egress)
+	log.Debug("MK in sanitize len(r.Egress):", len(r.Egress))
 	for _, rule := range r.Egress {
 		entities = append(entities, rule.ToEntities...)
 	}

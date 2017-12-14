@@ -42,6 +42,11 @@ func ExtractPolicyNameDeprecated(np *v1beta1.NetworkPolicy) string {
 func ParseNetworkPolicyDeprecated(np *v1beta1.NetworkPolicy) (api.Rules, error) {
 	ingresses := []api.IngressRule{}
 	namespace := k8sconst.ExtractNamespace(&np.ObjectMeta)
+	log.Debug("MK in ParseNetworkPolicyDeprecated  np.Spec.Ingress == nil : ", np.Spec.Ingress)
+	log.Debug("MK in ParseNetworkPolicyDeprecated  len(np.Spec.Ingress) : ", len(np.Spec.Ingress))
+	log.Debug("MK in ParseNetworkPolicyDeprecated  np.Spec.Egress : ", np.Spec.Egress)
+	log.Debug("MK in ParseNetworkPolicyDeprecated  len(np.Spec.Egress) : ", len(np.Spec.Egress))
+
 	for _, iRule := range np.Spec.Ingress {
 		// Based on NetworkPolicyIngressRule docs:
 		//   From []NetworkPolicyPeer

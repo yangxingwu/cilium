@@ -31,12 +31,16 @@ const (
 // capitalization of the protocol name are automatically fixed up. More
 // fundamental violations will cause an error to be returned.
 func (r Rule) Sanitize() error {
+	log.Debug("MK in Rule Sanitize r.Ingress:", r.Ingress)
+	log.Debug("MK in Rule Sanitize len(r.Ingress:)", len(r.Ingress))
 	for i := range r.Ingress {
 		if err := r.Ingress[i].sanitize(); err != nil {
 			return err
 		}
 	}
 
+	log.Debug("MK in Rule Sanitize r.Egress:", r.Egress)
+	log.Debug("MK in Rule Sanitize len(r.Egress:)", len(r.Egress))
 	for i := range r.Egress {
 		if err := r.Egress[i].sanitize(); err != nil {
 			return err

@@ -272,6 +272,10 @@ func (p *Repository) Add(r api.Rule) (uint64, error) {
 	p.Mutex.Lock()
 	defer p.Mutex.Unlock()
 
+	log.Debug("MK in Add before sanitize r.Ingress", r.Ingress)
+	log.Debug("MK in Add before sanitize len(r.Ingress)", len(r.Ingress))
+	log.Debug("MK in Add before sanitize r.Egress", r.Egress)
+	log.Debug("MK in Add before sanitize len(r.Egress)", len(r.Egress))
 	realRule := &rule{Rule: r}
 	if err := realRule.sanitize(); err != nil {
 		return p.revision, err
@@ -289,9 +293,14 @@ func (p *Repository) Add(r api.Rule) (uint64, error) {
 func (p *Repository) AddListLocked(rules api.Rules) (uint64, error) {
 	// Validate entire rule list first and only append array if
 	// all rules are valid
+
 	newList := make([]*rule, len(rules))
 	for i := range rules {
 		newList[i] = &rule{Rule: *rules[i]}
+		log.Debug("MK in AddListLocked before sanitize newList[i].Ingress", newList[i].Ingress)
+		log.Debug("MK in AddListLocked before sanitize len(newList[i].Ingress)", len(newList[i].Ingress))
+		log.Debug("MK in AddListLocked before sanitize newList[i].Egress", newList[i].Egress)
+		log.Debug("MK in AddListLocked before sanitize len(newList[i].Egress)", len(newList[i].Egress))
 		if err := newList[i].sanitize(); err != nil {
 			return p.revision, err
 		}

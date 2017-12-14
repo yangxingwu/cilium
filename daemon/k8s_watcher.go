@@ -661,6 +661,21 @@ func copyObjToV1Node(obj interface{}) *v1.Node {
 
 func (d *Daemon) addK8sNetworkPolicyV1(k8sNP *networkingv1.NetworkPolicy) {
 	scopedLog := log.WithField(logfields.K8sAPIVersion, k8sNP.TypeMeta.APIVersion)
+	scopedLog.Info("MK in addK8sNetworkPolicyV1 with np.Spec.Ingress:", k8sNP.Spec.Ingress)
+	if k8sNP.Spec.Ingress == nil {
+		scopedLog.Info("MK in addK8sNetworkPolicyV1 NAY k8sNP.Spec.Ingress is nil")
+	}
+
+	if k8sNP.Spec.Egress == nil {
+		scopedLog.Info("MK in addK8sNetworkPolicyV1 NAY k8sNP.Spec.Egress is nil")
+	}
+	scopedLog.Info("MK in addK8sNetworkPolicyV1 with len(np.Spec.Ingress):", len(k8sNP.Spec.Ingress))
+	if k8sNP.Spec.Ingress != nil && len(k8sNP.Spec.Ingress) == 0 {
+		scopedLog.Info("YAY k8sNP.Spec.Ingress is non-nil but len = 0")
+	}
+	if k8sNP.Spec.Egress != nil && len(k8sNP.Spec.Egress) == 0 {
+		scopedLog.Info("YAY k8sNP.Spec.Egress is non-nil but len = 0")
+	}
 	rules, err := k8s.ParseNetworkPolicy(k8sNP)
 	if err != nil {
 		scopedLog.WithError(err).WithFields(logrus.Fields{
@@ -713,6 +728,16 @@ func (d *Daemon) deleteK8sNetworkPolicyV1(k8sNP *networkingv1.NetworkPolicy) {
 // FIXME remove when we drop support to k8s Network Policy extensions/v1beta1
 func (d *Daemon) addK8sNetworkPolicyV1beta1(k8sNP *v1beta1.NetworkPolicy) {
 	scopedLog := log.WithField(logfields.K8sAPIVersion, k8sNP.TypeMeta.APIVersion)
+	scopedLog.Info("MK in addK8sNetworkPolicyV1beta1  np.Spec.Ingress : ", k8sNP.Spec.Ingress)
+	if k8sNP.Spec.Ingress != nil && len(k8sNP.Spec.Ingress) == 0 {
+		scopedLog.Info("YAY k8sNP.Spec.Ingress is non-nil but len = 0")
+	}
+	if k8sNP.Spec.Egress != nil && len(k8sNP.Spec.Egress) == 0 {
+		scopedLog.Info("YAY k8sNP.Spec.Egress is non-nil but len = 0")
+	}
+	scopedLog.Info("MK in addK8sNetworkPolicyV1beta1  len(np.Spec.Ingress) : ", len(k8sNP.Spec.Ingress))
+	scopedLog.Info("MK in addK8sNetworkPolicyV1beta1  np.Spec.Egress : ", k8sNP.Spec.Egress)
+	scopedLog.Info("MK in addK8sNetworkPolicyV1beta1  len(np.Spec.Egress) : ", len(k8sNP.Spec.Egress))
 	rules, err := k8s.ParseNetworkPolicyDeprecated(k8sNP)
 	if err != nil {
 		scopedLog.WithError(err).WithField(logfields.Object, logfields.Repr(k8sNP)).Error("Error while parsing k8s NetworkPolicy")
