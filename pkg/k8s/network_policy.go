@@ -77,9 +77,12 @@ func ParseNetworkPolicy(np *networkingv1.NetworkPolicy) (api.Rules, error) {
 	ingresses := []api.IngressRule{}
 	egresses := []api.EgressRule{}
 
+	log.Debug("MK in ParseNetworkPolicy with np.Spec.Ingress:",np.Spec.Ingress)
+	log.Debug("MK in ParseNetworkPolicy with len(np.Spec.Ingress):",len(np.Spec.Ingress))
 	namespace := k8sconst.ExtractNamespace(&np.ObjectMeta)
 	for _, iRule := range np.Spec.Ingress {
 		ingress := api.IngressRule{}
+		log.Debug("MK in ParseNetworkPolicy LOOP iRule",iRule)
 		if iRule.From != nil && len(iRule.From) > 0 {
 			for _, rule := range iRule.From {
 				endpointSelector, err := parseNetworkPolicyPeer(namespace, &rule)
