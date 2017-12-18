@@ -40,13 +40,13 @@ type Rule struct {
 	// If omitted or empty, this rule does not apply at ingress.
 	//
 	// +optional
-	Ingress []IngressRule `json:"ingress,omitempty"`
+	Ingress []IngressRule `json:"ingress"`
 
 	// Egress is a list of EgressRule which are enforced at egress.
 	// If omitted or empty, this rule does not apply at egress.
 	//
 	// +optional
-	Egress []EgressRule `json:"egress,omitempty"`
+	Egress []EgressRule `json:"egress"`
 
 	// Labels is a list of optional strings which can be used to
 	// re-identify the rule or to store metadata. It is possible to lookup

@@ -386,8 +386,24 @@ func (p *Repository) GetJSON() string {
 func (p *Repository) GetRulesMatching(labels labels.LabelArray, includeEntities bool) (ingressMatch bool, egressMatch bool) {
 	ingressMatch = false
 	egressMatch = false
+	log.Debug("MK in GetRulesMatching p.rules:", p.rules)
+	log.Debug("MK in GetRulesMatching labels", labels)
+	if p.rules == nil {
+		log.Debug("MK in GetRulesMatching p.rules: is NIL")
+	}
 	for _, r := range p.rules {
 		rulesMatch := r.EndpointSelector.Matches(labels)
+		log.Debug("MK in GetRulesMatching rulesMatch:", rulesMatch)
+		if rulesMatch {
+			log.Debug("MK in GetRulesMatching r.Ingress:", r.Ingress)
+			log.Debug("MK in GetRulesMatching r.Egress:", r.Egress)
+			if r.Ingress == nil {
+				log.Debug("MK in GetRulesMatching r.Ingress == NIL")
+			}
+			if r.Egress == nil {
+				log.Debug("MK in GetRulesMatching r.Egress == NIL")
+			}
+		}
 		if rulesMatch {
 			if len(r.Ingress) > 0 {
 				ingressMatch = true
