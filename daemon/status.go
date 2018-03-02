@@ -89,9 +89,8 @@ func checkLocks(d *Daemon) {
 func (h *getHealthz) getNodeStatus() *models.ClusterStatus {
 	ipv4 := !h.daemon.conf.IPv4Disabled
 
-	local, _ := node.GetLocalNode()
 	clusterStatus := models.ClusterStatus{
-		Self: local.Name,
+		Self: node.GetLocalNode().Name,
 	}
 	for _, node := range node.GetNodes() {
 		clusterStatus.Nodes = append(clusterStatus.Nodes, node.GetModel(ipv4))

@@ -1,4 +1,4 @@
-// Copyright 2016-2017 Authors of Cilium
+// Copyright 2016-2018 Authors of Cilium
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +15,14 @@
 package node
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/cilium/cilium/api/v1/models"
+	"github.com/cilium/cilium/pkg/labels"
+	"github.com/cilium/cilium/pkg/logging/logfields"
 
+	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 )
 
@@ -32,9 +36,60 @@ func (nn Identity) String() string {
 	return nn.Name
 }
 
+// EncapsulationType is a networking encapsulation type
+type EncapsulationType int
+
+const (
+	// EncapsulationDisabled indicates to disable encapsulation
+	EncapsulationDisabled EncapsulationType = iota
+
+	// EncapsulationVXLAN indicates to use VXLAN encapsulation mode
+	EncapsulationVXLAN
+
+	// EncapsulationGeneve indicates to use Geneve encapsulation mode
+	EncapsulationGeneve
+)
+
+func (et EncapsulationType) String() string {
+	switch et {
+	case EncapsulationDisabled:
+		return "disabled"
+	case EncapsulationVXLAN:
+		return "vxlan"
+	case EncapsulationGeneve:
+		return "geneve"
+	}
+
+	return "unknown"
+}
+
+// RoutingConfiguration is the configuration of the node that defines how to
+// reach endpoints running on the node
+type RoutingConfiguration struct {
+	// Encapsulation defines whether and how the endpoints on the node can
+	// be reached using network encapsulation. Encapsulation is always the
+	// preferred routing mode unless it is explicitly disabled.
+	Encapsulation EncapsulationType
+
+	// DirectRoute indicates that the node's endpoints can be reached via a
+	// direct route that uses the node's external IP address as gateway.
+	// Enabling this flag does not automatically prefer direct routing,
+	// encapsulation must be disabled in order for direct routing to take
+	// place.
+	DirectRoute bool
+}
+
+func (rc RoutingConfiguration) String() string {
+	return fmt.Sprintf("encapsulation=%s direct-routing=%t", rc.Encapsulation, rc.DirectRoute)
+}
+
 // Node contains the nodes name, the list of addresses to this address
 type Node struct {
-	Name        string
+	// Name is the FQDN (inside the cluster) of the node
+	Name string
+
+	// IPAddresses is the list of external and internal addresses
+	// associated with the node
 	IPAddresses []Address
 
 	// IPv4AllocCIDR if set, is the IPv4 address pool out of which the node
@@ -45,9 +100,6 @@ type Node struct {
 	// allocates IPs for local endpoints from
 	IPv6AllocCIDR *net.IPNet
 
-	// dev contains the device name to where the IPv6 traffic should be send
-	dev string
-
 	// IPv4HealthIP if not nil, this is the IPv4 address of the
 	// cilium-health endpoint located on the node.
 	IPv4HealthIP net.IP
@@ -55,12 +107,34 @@ type Node struct {
 	// IPv6HealthIP if not nil, this is the IPv6 address of the
 	// cilium-health endpoint located on the node.
 	IPv6HealthIP net.IP
+
+	// Routing defines the routing configuration and reachability
+	// information how to retrieve endpoints on the node
+	Routing *RoutingConfiguration
+
+	// Labels provides a mechanism to attach metadata to nodes
+	Labels labels.Labels
+
+	// Private fields
+	// These fields are not synchronized via the kvstore
+
+	// cluster membership
+	cluster *clusterConfiguation
+
+	// dev contains the device name to where the IPv6 traffic should be send
+	dev string
 }
 
 // Address is a node address which contains an IP and the address type.
 type Address struct {
 	AddressType v1.NodeAddressType
 	IP          net.IP
+}
+
+func (n *Node) getLogger() *logrus.Entry {
+	return log.WithFields(logrus.Fields{
+		logfields.NodeName: n.Name,
+	})
 }
 
 func (n *Node) getNodeIP(ipv6 bool) (net.IP, v1.NodeAddressType) {
@@ -176,10 +250,23 @@ func (n *Node) GetModel(ipv4 bool) *models.NodeElement {
 	}
 }
 
+func (n *Node) getIdentity() Identity {
+	return Identity{Name: n.Name}
+}
+
+// Delete removes the nodes from the cluster
+func (n *Node) Delete() {
+	DeleteNode(n.getIdentity())
+}
+
+var localRoutingConfiguration *RoutingConfiguration
+
 // GetLocalNode returns the identity and node spec for the local node
-func GetLocalNode() (Identity, *Node) {
-	return Identity{Name: nodeName}, &Node{
-		Name: nodeName,
+func GetLocalNode() *Node {
+	return &Node{
+		Name:    nodeName,
+		cluster: &clusterConf,
+		Routing: localRoutingConfiguration,
 		IPAddresses: []Address{
 			{
 				AddressType: v1.NodeInternalIP,
@@ -191,5 +278,13 @@ func GetLocalNode() (Identity, *Node) {
 		IPv4HealthIP:  GetIPv4HealthIP(),
 		IPv6HealthIP:  GetIPv6HealthIP(),
 	}
+}
 
+// ConfigureLocalNode configures the local node. This is called on agent
+// startup to configure the local node based on the configuration options
+// passed to the agent
+func ConfigureLocalNode(routing *RoutingConfiguration) {
+	localRoutingConfiguration = routing
+
+	log.Infof("Local node routing configuration: %s", routing)
 }

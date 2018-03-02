@@ -1051,9 +1051,7 @@ func NewDaemon(c *Config) (*Daemon, error) {
 	log.Infof("  IPv4 allocation prefix: %s", node.GetIPv4AllocRange())
 	log.Infof("  IPv6 router address: %s", node.GetIPv6Router())
 
-	// Populate list of nodes with local node entry
-	ni, n := node.GetLocalNode()
-	node.UpdateNode(ni, n, node.TunnelRoute, nil)
+	node.RegisterLocalNode()
 
 	// This needs to be done after the node addressing has been configured
 	// as the node address is required as sufix

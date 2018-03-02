@@ -1,4 +1,4 @@
-// Copyright 2016-2017 Authors of Cilium
+// Copyright 2016-2018 Authors of Cilium
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,20 +32,17 @@ import (
 
 var log = logging.DefaultLogger
 
-// RouteType represents the route type to be configured when adding the node
-// routes
-type RouteType int
-
 const (
-	// TunnelRoute is the route type to set up the BPF tunnel maps
-	TunnelRoute RouteType = 1 << iota
-	// DirectRoute is the route type to set up the L3 route using iproute
-	DirectRoute
+	defaultClusterName = "default"
+
+	noWarningOnError = false
+	warningOnError   = true
 )
 
 type clusterConfiguation struct {
 	lock.RWMutex
 
+	name                  string
 	nodes                 map[Identity]*Node
 	ciliumHostInitialized bool
 	usePerNodeRoutes      bool
@@ -56,6 +53,7 @@ var clusterConf = newClusterConfiguration()
 
 func newClusterConfiguration() clusterConfiguation {
 	return clusterConfiguation{
+		name:        defaultClusterName,
 		nodes:       map[Identity]*Node{},
 		auxPrefixes: []*net.IPNet{},
 	}
@@ -80,15 +78,28 @@ func GetNode(ni Identity) *Node {
 	return clusterConf.getNode(ni)
 }
 
-func deleteNodeCIDR(ip *net.IPNet) {
-	if ip == nil {
-		return
-	}
-
-	if err := tunnel.DeleteTunnelEndpoint(ip.IP); err != nil {
+func deleteTunnelEntry(ip *net.IPNet, warnOnError bool) {
+	err := tunnel.DeleteTunnelEndpoint(ip.IP)
+	if err != nil && warnOnError {
 		log.WithError(err).WithFields(logrus.Fields{
 			logfields.IPAddr: ip,
-		}).Debug("bpf: Unable to delete in tunnel endpoint map")
+		}).Warning("Unable to delete tunnel endpoint in BPF map")
+	}
+}
+
+func (n *Node) deleteTunnelEntries(warnOnError bool) {
+	n.getLogger().WithFields(logrus.Fields{
+		logfields.IPAddr:   n.GetNodeIP(false),
+		logfields.V4Prefix: n.IPv4AllocCIDR,
+		logfields.V6Prefix: n.IPv6AllocCIDR,
+	}).Debug("Deleting tunnel entries of node")
+
+	if n.IPv4AllocCIDR != nil {
+		deleteTunnelEntry(n.IPv4AllocCIDR, warnOnError)
+	}
+
+	if n.IPv6AllocCIDR != nil {
+		deleteTunnelEntry(n.IPv6AllocCIDR, warnOnError)
 	}
 }
 
@@ -200,7 +211,7 @@ func replaceNodeRoute(ip *net.IPNet) {
 	}
 }
 
-func (cc *clusterConfiguation) replaceHostRoutes() {
+func (cc *clusterConfiguation) updateNodeRoutes() {
 	if !cc.ciliumHostInitialized {
 		log.Debug("Deferring node routes installation, host device not present yet")
 		return
@@ -229,7 +240,7 @@ func (cc *clusterConfiguation) replaceHostRoutes() {
 func (cc *clusterConfiguation) installHostRoutes() {
 	cc.Lock()
 	cc.ciliumHostInitialized = true
-	cc.replaceHostRoutes()
+	cc.updateNodeRoutes()
 	cc.Unlock()
 }
 
@@ -259,7 +270,7 @@ func EnablePerNodeRoutes() {
 	clusterConf.Unlock()
 }
 
-func updateNodeCIDR(n *Node, ip *net.IPNet) {
+func updateTunnelEntry(n *Node, ip *net.IPNet) {
 	if ip == nil {
 		return
 	}
@@ -271,59 +282,96 @@ func updateNodeCIDR(n *Node, ip *net.IPNet) {
 	}
 }
 
-// UpdateNode updates the new node in the nodes' map with the given identity.
-// When using DirectRoute RouteType the field ownAddr should contain the IPv6
-// address of the interface that can reach the other nodes.
-func UpdateNode(ni Identity, n *Node, routesTypes RouteType, ownAddr net.IP) {
+func (n *Node) updateTunnelEntries() {
+	n.getLogger().WithFields(logrus.Fields{
+		logfields.IPAddr:   n.GetNodeIP(false),
+		logfields.V4Prefix: n.IPv4AllocCIDR,
+		logfields.V6Prefix: n.IPv6AllocCIDR,
+	}).Debug("Updating tunnel entries of node")
+
+	updateTunnelEntry(n, n.IPv4AllocCIDR)
+	updateTunnelEntry(n, n.IPv6AllocCIDR)
+}
+
+// Update must be called when the node information was updated
+//
+// Updates the new node in the nodes' map with the given identity.  This also
+// updates the local routing tables and tunnel lookup maps according to the
+// node's preferred way of being reached.
+func (n *Node) Update() {
 	clusterConf.Lock()
 	defer clusterConf.Unlock()
 
+	ni := n.getIdentity()
 	oldNode, oldNodeExists := clusterConf.nodes[ni]
-	if (routesTypes & TunnelRoute) != 0 {
-		if oldNodeExists {
-			deleteNodeCIDR(oldNode.IPv4AllocCIDR)
-			deleteNodeCIDR(oldNode.IPv6AllocCIDR)
-		}
-		// FIXME if PodCIDR is empty retrieve the CIDR from the KVStore
-		log.WithFields(logrus.Fields{
-			logfields.IPAddr:   n.GetNodeIP(false),
-			logfields.V4Prefix: n.IPv4AllocCIDR,
-			logfields.V6Prefix: n.IPv6AllocCIDR,
-		}).Debug("bpf: Setting tunnel endpoint")
-
-		updateNodeCIDR(n, n.IPv4AllocCIDR)
-		updateNodeCIDR(n, n.IPv6AllocCIDR)
-	}
-	if (routesTypes & DirectRoute) != 0 {
-		updateIPRoute(oldNode, n, ownAddr)
-	}
 
 	clusterConf.nodes[ni] = n
-	clusterConf.replaceHostRoutes()
+	clusterConf.updateNodeRoutes()
+
+	if n.Routing == nil {
+		// Remove all routing information to the node when the node
+		// removes its reachability information
+		if oldNode != nil && oldNode.Routing != nil {
+			oldNode.deleteTunnelEntries(noWarningOnError)
+			oldNode.deleteIPRoute(noWarningOnError)
+		}
+
+		// No routing configuration provided, all code below depends on
+		return
+	}
+
+	if n.Routing.Encapsulation != EncapsulationDisabled {
+		if oldNodeExists {
+			oldNode.deleteTunnelEntries(warningOnError)
+		}
+
+		// GH-XXX
+		// For now, the datapath is only capable of reaching other
+		// nodes using encapsulation protocols that match the local
+		// configuration.
+		localMode := GetLocalNode().Routing.Encapsulation
+		if n.Routing.Encapsulation != localMode {
+			n.getLogger().Warningf("Remote node is requesting to be reached via %s, local node is using %s",
+				n.Routing.Encapsulation, localMode)
+			return
+		}
+
+		n.updateTunnelEntries()
+	} else {
+		// if the node was configured before and encapsulation was
+		// enabled, remove the configuration used
+		if oldNode != nil && oldNode.Routing != nil &&
+			oldNode.Routing.Encapsulation != EncapsulationDisabled {
+			oldNode.deleteTunnelEntries(warningOnError)
+		}
+
+		// ensure that no tunnel entry exists for the node. This should
+		// typically be a no-op
+		n.deleteTunnelEntries(noWarningOnError)
+	}
+
+	if n.Routing.DirectRoute {
+		updateIPRoute(oldNode, n)
+	} else {
+		if oldNode != nil && oldNode.Routing != nil && oldNode.Routing.DirectRoute {
+			oldNode.deleteIPRoute(warningOnError)
+		}
+
+		n.deleteIPRoute(noWarningOnError)
+	}
 }
 
 // DeleteNode remove the node from the nodes' maps and / or the L3 routes to
 // reach that node.
-func DeleteNode(ni Identity, routesTypes RouteType) {
+func DeleteNode(ni Identity) {
 	clusterConf.Lock()
 	defer clusterConf.Unlock()
 
 	if n, ok := clusterConf.nodes[ni]; ok {
-		if (routesTypes & TunnelRoute) != 0 {
-			log.WithFields(logrus.Fields{
-				logfields.IPAddr:   n.GetNodeIP(false),
-				logfields.V4Prefix: n.IPv4AllocCIDR,
-				logfields.V6Prefix: n.IPv6AllocCIDR,
-			}).Debug("bpf: Removing tunnel endpoint")
-
-			deleteNodeCIDR(n.IPv4AllocCIDR)
-			deleteNodeCIDR(n.IPv6AllocCIDR)
-		}
-		if (routesTypes & DirectRoute) != 0 {
-			deleteIPRoute(n)
-		}
+		n.deleteTunnelEntries(noWarningOnError)
+		n.deleteIPRoute(noWarningOnError)
 		delete(clusterConf.nodes, ni)
-		clusterConf.replaceHostRoutes()
+		clusterConf.updateNodeRoutes()
 	}
 }
 
@@ -342,12 +390,13 @@ func GetNodes() map[Identity]Node {
 
 // updateIPRoute updates the IP routing entry for the given node n via the
 // network interface that as ownAddr.
-func updateIPRoute(oldNode, n *Node, ownAddr net.IP) {
+func updateIPRoute(oldNode, n *Node) {
 	if n.IPv6AllocCIDR == nil {
 		return
 	}
+	ownAddr := GetIPv6()
 	nodeIPv6 := n.GetNodeIP(true)
-	scopedLog := log.WithField(logfields.V6Prefix, n.IPv6AllocCIDR)
+	scopedLog := n.getLogger().WithField(logfields.V6Prefix, n.IPv6AllocCIDR)
 	scopedLog.WithField(logfields.IPAddr, nodeIPv6).Debug("iproute: Setting endpoint v6 route for prefix via IP")
 
 	nl, err := firstLinkWithv6(ownAddr)
@@ -367,15 +416,7 @@ func updateIPRoute(oldNode, n *Node, ownAddr net.IP) {
 			!oldNodeIPv6.Equal(nodeIPv6) ||
 			oldNode.dev != n.dev {
 			// If any of the routing components changed, then remove the old entries
-
-			err = routeDel(oldNodeIPv6.String(), oldNode.IPv6AllocCIDR.String(), oldNode.dev)
-			if err != nil {
-				log.WithError(err).WithFields(logrus.Fields{
-					logfields.IPAddr:   oldNodeIPv6,
-					logfields.V6Prefix: oldNode.IPv6AllocCIDR,
-					"device":           oldNode.dev,
-				}).Warn("Cannot delete old route during update")
-			}
+			oldNode.deleteIPRoute(warningOnError)
 		}
 	} else {
 		n.dev = dev
@@ -384,7 +425,7 @@ func updateIPRoute(oldNode, n *Node, ownAddr net.IP) {
 	// Always re add
 	err = routeAdd(nodeIPv6.String(), n.IPv6AllocCIDR.String(), dev)
 	if err != nil {
-		log.WithError(err).WithFields(logrus.Fields{
+		n.getLogger().WithError(err).WithFields(logrus.Fields{
 			logfields.IPAddr:   nodeIPv6,
 			logfields.V6Prefix: n.IPv6AllocCIDR,
 			"device":           dev,
@@ -395,15 +436,15 @@ func updateIPRoute(oldNode, n *Node, ownAddr net.IP) {
 
 // deleteIPRoute deletes the routing entries previously created for the given
 // node.
-func deleteIPRoute(node *Node) {
-	oldNodeIPv6 := node.GetNodeIP(true)
+func (n *Node) deleteIPRoute(warnOnError bool) {
+	oldNodeIPv6 := n.GetNodeIP(true)
 
-	err := routeDel(oldNodeIPv6.String(), node.IPv6AllocCIDR.String(), node.dev)
-	if err != nil {
-		log.WithError(err).WithFields(logrus.Fields{
+	err := routeDel(oldNodeIPv6.String(), n.IPv6AllocCIDR.String(), n.dev)
+	if err != nil && warnOnError {
+		n.getLogger().WithError(err).WithFields(logrus.Fields{
 			logfields.IPAddr:   oldNodeIPv6,
-			logfields.V6Prefix: node.IPv6AllocCIDR,
-			"device":           node.dev,
+			logfields.V6Prefix: n.IPv6AllocCIDR,
+			"device":           n.dev,
 		}).Warn("Cannot delete route")
 	}
 }

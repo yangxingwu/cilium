@@ -18,10 +18,12 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/cilium/cilium/api/v1/models"
 	"github.com/cilium/cilium/daemon/options"
 	"github.com/cilium/cilium/pkg/lock"
+	"github.com/cilium/cilium/pkg/node"
 	"github.com/cilium/cilium/pkg/option"
 )
 
@@ -87,6 +89,34 @@ type Config struct {
 
 	// Monitor contains the configuration for the node monitor.
 	Monitor *models.MonitorStatus
+
+	routingConfig *node.RoutingConfiguration
+}
+
+func (c *Config) deriveNodeRoutingConfiguration() *node.RoutingConfiguration {
+	routingConfiguration := node.RoutingConfiguration{}
+	switch strings.ToLower(c.Tunnel) {
+	case "vxlan":
+		routingConfiguration.Encapsulation = node.EncapsulationVXLAN
+	case "geneve":
+		routingConfiguration.Encapsulation = node.EncapsulationGeneve
+	case "disabled", "false":
+		routingConfiguration.Encapsulation = node.EncapsulationDisabled
+	default:
+		log.Fatalf("Unknown encapsulation type '%s'. Supported values are vxlan, geneve, and disabled", c.Tunnel)
+	}
+
+	if c.Device != "undefined" {
+		routingConfiguration.DirectRoute = true
+	}
+
+	return &routingConfiguration
+}
+
+// Initialize is called early on in bootstrapping and initializes and validates
+// the configuration
+func (c *Config) Initialize() {
+	c.routingConfig = c.deriveNodeRoutingConfiguration()
 }
 
 func NewConfig() *Config {

@@ -87,6 +87,7 @@ var (
 
 	// autoIPv6NodeRoutes automatically adds L3 direct routing when using direct mode (-d)
 	autoIPv6NodeRoutes    bool
+	autoIPv4NodeRoutes    bool
 	bpfRoot               string
 	cmdRefDir             string
 	containerRuntimes     []string
@@ -109,6 +110,7 @@ var (
 	socketPath            string
 	tracePayloadLen       int
 	useEnvoy              bool // deprecated, value is ignored
+	useK8sNodeMesh        bool
 	v4Address             string
 	v4ClusterCidrMaskSize int
 	v4Prefix              string
@@ -356,6 +358,8 @@ func init() {
 		"k8s-api-server", "", "Kubernetes api address server (for https use --k8s-kubeconfig-path instead)")
 	flags.StringVar(&k8sKubeConfigPath,
 		"k8s-kubeconfig-path", "", "Absolute path of the kubernetes kubeconfig file")
+	flags.BoolVar(&useK8sNodeMesh,
+		"k8s-use-node-annotations", false, "Annotate kubernetes nodes to build routable mesh")
 	flags.BoolVar(&config.KeepConfig,
 		"keep-config", false, "When restoring state, keeps containers' configuration in place")
 	flags.BoolVar(&config.KeepTemplates,
@@ -509,6 +513,8 @@ func initEnv(cmd *cobra.Command) {
 	envoyVersion := envoy.GetEnvoyVersion()
 	log.Infof("%s", envoyVersion)
 
+	config.Initialize()
+
 	envoyVersionArray := strings.Fields(envoyVersion)
 	if len(envoyVersionArray) < 3 {
 		log.Fatal("Truncated Envoy version string, cannot verify version match.")
@@ -609,6 +615,7 @@ func initEnv(cmd *cobra.Command) {
 	config.Opts.Set(endpoint.OptionDebug, viper.GetBool("debug"))
 
 	autoIPv6NodeRoutes = viper.GetBool("auto-ipv6-node-routes")
+	autoIPv4NodeRoutes = viper.GetBool("auto-ipv4-node-routes")
 
 	config.Opts.Set(endpoint.OptionDropNotify, true)
 	config.Opts.Set(endpoint.OptionTraceNotify, true)
@@ -683,7 +690,10 @@ func initEnv(cmd *cobra.Command) {
 	}
 
 	log.Infof("Container runtimes being used: %s", workloads.GetRuntimesString())
+
+	node.ConfigureLocalNode(config.routingConfig)
 }
+
 func runDaemon() {
 	d, err := NewDaemon(config)
 	if err != nil {

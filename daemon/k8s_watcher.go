@@ -525,45 +525,47 @@ func (d *Daemon) EnableK8sWatcher(reSyncPeriod time.Duration) error {
 
 	si.Start(wait.NeverStop)
 
-	_, nodesController := cache.NewInformer(
-		cache.NewListWatchFromClient(k8s.Client().CoreV1().RESTClient(),
-			"nodes", v1.NamespaceAll, fields.Everything()),
-		&v1.Node{},
-		reSyncPeriod,
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				metrics.SetTSValue(metrics.EventTSK8s, time.Now())
-				if k8sNode := copyObjToV1Node(obj); k8sNode != nil {
-					serNodes.Enqueue(func() error {
-						d.addK8sNodeV1(k8sNode)
-						return nil
-					}, serializer.NoRetry)
-				}
-			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				metrics.SetTSValue(metrics.EventTSK8s, time.Now())
-				if oldK8sNode := copyObjToV1Node(oldObj); oldK8sNode != nil {
-					if newK8sNode := copyObjToV1Node(newObj); newK8sNode != nil {
+	if useK8sNodeMesh {
+		_, nodesController := cache.NewInformer(
+			cache.NewListWatchFromClient(k8s.Client().CoreV1().RESTClient(),
+				"nodes", v1.NamespaceAll, fields.Everything()),
+			&v1.Node{},
+			reSyncPeriod,
+			cache.ResourceEventHandlerFuncs{
+				AddFunc: func(obj interface{}) {
+					metrics.SetTSValue(metrics.EventTSK8s, time.Now())
+					if k8sNode := copyObjToV1Node(obj); k8sNode != nil {
 						serNodes.Enqueue(func() error {
-							d.updateK8sNodeV1(oldK8sNode, newK8sNode)
+							d.addK8sNodeV1(k8sNode)
 							return nil
 						}, serializer.NoRetry)
 					}
-				}
+				},
+				UpdateFunc: func(oldObj, newObj interface{}) {
+					metrics.SetTSValue(metrics.EventTSK8s, time.Now())
+					if oldK8sNode := copyObjToV1Node(oldObj); oldK8sNode != nil {
+						if newK8sNode := copyObjToV1Node(newObj); newK8sNode != nil {
+							serNodes.Enqueue(func() error {
+								d.updateK8sNodeV1(oldK8sNode, newK8sNode)
+								return nil
+							}, serializer.NoRetry)
+						}
+					}
+				},
+				DeleteFunc: func(obj interface{}) {
+					metrics.SetTSValue(metrics.EventTSK8s, time.Now())
+					if k8sNode := copyObjToV1Node(obj); k8sNode != nil {
+						serNodes.Enqueue(func() error {
+							d.deleteK8sNodeV1(k8sNode)
+							return nil
+						}, serializer.NoRetry)
+					}
+				},
 			},
-			DeleteFunc: func(obj interface{}) {
-				metrics.SetTSValue(metrics.EventTSK8s, time.Now())
-				if k8sNode := copyObjToV1Node(obj); k8sNode != nil {
-					serNodes.Enqueue(func() error {
-						d.deleteK8sNodeV1(k8sNode)
-						return nil
-					}, serializer.NoRetry)
-				}
-			},
-		},
-	)
-	go nodesController.Run(wait.NeverStop)
-	d.k8sAPIGroups.addAPI(k8sAPIGroupNodeV1Core)
+		)
+		go nodesController.Run(wait.NeverStop)
+		d.k8sAPIGroups.addAPI(k8sAPIGroupNodeV1Core)
+	}
 
 	return nil
 }
@@ -1775,26 +1777,12 @@ func (d *Daemon) updateCiliumNetworkPolicyV2(ciliumV2Store cache.Store,
 }
 
 func (d *Daemon) addK8sNodeV1(k8sNode *v1.Node) {
-	ni := node.Identity{Name: k8sNode.ObjectMeta.Name}
 	n := k8s.ParseNode(k8sNode)
-
-	routeTypes := node.TunnelRoute
-
-	// Add IPv6 routing only in non encap. With encap we do it with bpf tunnel
-	// FIXME create a function to know on which mode is the daemon running on
-	var ownAddr net.IP
-	if autoIPv6NodeRoutes && d.conf.Device != "undefined" {
-		// ignore own node
-		if n.Name != node.GetName() {
-			ownAddr = node.GetIPv6()
-			routeTypes |= node.DirectRoute
-		}
-	}
-
-	node.UpdateNode(ni, n, routeTypes, ownAddr)
+	n.Routing = d.conf.routingConfig
+	n.Update()
 
 	log.WithFields(logrus.Fields{
-		logfields.K8sNodeID:     ni,
+		logfields.K8sNodeID:     k8sNode.ObjectMeta.Name,
 		logfields.K8sAPIVersion: k8sNode.TypeMeta.APIVersion,
 		logfields.Node:          logfields.Repr(n),
 	}).Debug("Added node")
@@ -1812,18 +1800,7 @@ func (d *Daemon) updateK8sNodeV1(_, k8sNode *v1.Node) {
 		return
 	}
 
-	routeTypes := node.TunnelRoute
-	// Always re-add the routing tables as they might be accidentally removed
-	var ownAddr net.IP
-	if autoIPv6NodeRoutes && d.conf.Device != "undefined" {
-		// ignore own node
-		if newNode.Name != node.GetName() {
-			ownAddr = node.GetIPv6()
-			routeTypes |= node.DirectRoute
-		}
-	}
-
-	node.UpdateNode(ni, newNode, routeTypes, ownAddr)
+	newNode.Update()
 
 	log.WithFields(logrus.Fields{
 		logfields.K8sNodeID:     ni,
@@ -1835,7 +1812,7 @@ func (d *Daemon) updateK8sNodeV1(_, k8sNode *v1.Node) {
 func (d *Daemon) deleteK8sNodeV1(k8sNode *v1.Node) {
 	ni := node.Identity{Name: k8sNode.ObjectMeta.Name}
 
-	node.DeleteNode(ni, node.TunnelRoute|node.DirectRoute)
+	node.DeleteNode(ni)
 
 	log.WithFields(logrus.Fields{
 		logfields.K8sNodeID:     ni,
