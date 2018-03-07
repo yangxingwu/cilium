@@ -90,7 +90,7 @@ if ENV['BUILD_NUMBER'] then
 end
 
 if ENV['K8S'] then
-    $vm_base_name = "k8s"
+    $vm_base_name = "k8s-193"
 else
     $vm_base_name = "runtime"
 end

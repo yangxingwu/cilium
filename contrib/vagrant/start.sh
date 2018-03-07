@@ -38,7 +38,7 @@ export 'VM_MEMORY'=${MEMORY:-3072}
 export 'VM_CPUS'=${CPUS:-2}
 # VM_BASENAME tag is only set if K8S option is active
 export 'VM_BASENAME'="runtime"
-export 'VM_BASENAME'=${K8S+"k8s"}
+export 'VM_BASENAME'=${K8S+"k8s-193"}
 # Set VAGRANT_DEFAULT_PROVIDER to virtualbox
 export 'VAGRANT_DEFAULT_PROVIDER'=${VAGRANT_DEFAULT_PROVIDER:-"virtualbox"}
 # Sets the default cilium TUNNEL_MODE to "vxlan"

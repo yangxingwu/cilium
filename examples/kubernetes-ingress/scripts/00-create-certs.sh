@@ -10,8 +10,8 @@ certs_dir="${dir}/certs"
 mkdir -p "${certs_dir}"
 cd "${certs_dir}"
 
-master="k8s1"
-worker="k8s2"
+master="k8s-1931"
+worker="k8s-1932"
 
 if [ -n "${INSTALL}" ]; then
     log "Downloading cfssl utility..."
