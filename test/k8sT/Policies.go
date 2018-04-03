@@ -86,16 +86,6 @@ var _ = Describe("K8sValidatedPolicyTest", func() {
 		Expect(err).To(BeNil(), "Terminating containers are not deleted after timeout")
 	})
 
-	AfterFailed(func() {
-		kubectl.CiliumReport(helpers.KubeSystemNamespace, []string{
-			"cilium service list",
-			"cilium endpoint list"})
-	})
-
-	JustAfterEach(func() {
-		kubectl.ValidateNoErrorsOnLogs(CurrentGinkgoTestDescription().Duration)
-	})
-
 	Context("Basic Test", func() {
 		var (
 			ciliumPod string
@@ -144,6 +134,16 @@ var _ = Describe("K8sValidatedPolicyTest", func() {
 			kubectl.Delete(l7Policy)
 			kubectl.Delete(denyIngress)
 			kubectl.Delete(denyEgress)
+		})
+
+		AfterFailed(func() {
+			kubectl.CiliumReport(helpers.KubeSystemNamespace, []string{
+				"cilium service list",
+				"cilium endpoint list"})
+		})
+
+		JustAfterEach(func() {
+			kubectl.ValidateNoErrorsOnLogs(CurrentGinkgoTestDescription().Duration)
 		})
 
 		It("tests PolicyEnforcement updates", func() {
@@ -484,6 +484,16 @@ var _ = Describe("K8sValidatedPolicyTest", func() {
 			Expect(err).Should(BeNil())
 		})
 
+		AfterFailed(func() {
+			kubectl.CiliumReport(helpers.KubeSystemNamespace, []string{
+				"cilium service list",
+				"cilium endpoint list"})
+		})
+
+		JustAfterEach(func() {
+			kubectl.ValidateNoErrorsOnLogs(CurrentGinkgoTestDescription().Duration)
+		})
+
 		getPolicyCmd := func(policy string) string {
 			return fmt.Sprintf("%s=%s %s=%s",
 				helpers.KubectlPolicyNameLabel, policy,
@@ -641,6 +651,16 @@ var _ = Describe("K8sValidatedPolicyTest", func() {
 			By("Deleting the namespace that was used for the pods")
 			err := kubectl.CoreV1().Namespaces().Delete(namespace, &metav1.DeleteOptions{})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterFailed(func() {
+			kubectl.CiliumReport(helpers.KubeSystemNamespace, []string{
+				"cilium service list",
+				"cilium endpoint list"})
+		})
+
+		JustAfterEach(func() {
+			kubectl.ValidateNoErrorsOnLogs(CurrentGinkgoTestDescription().Duration)
 		})
 
 		It("should enforce policy based on NamespaceSelector", func() {
