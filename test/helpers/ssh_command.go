@@ -199,7 +199,6 @@ func (client *SSHClient) RunCommandContext(ctx context.Context, cmd *SSHCommand)
 	if err != nil {
 		return err
 	}
-	defer session.Close()
 
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          1,     // enable echoing
