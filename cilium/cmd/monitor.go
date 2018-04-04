@@ -25,6 +25,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cilium/cilium/daemon/defaults"
@@ -277,7 +278,7 @@ func receiveEvent(data []byte, cpu int) {
 
 func setupSigHandler() {
 	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGHUP)
 	go func() {
 		for range signalChan {
 			fmt.Printf("\nReceived an interrupt, disconnecting from monitor...\n\n")
