@@ -81,3 +81,15 @@ func Netcat(endpoint string, optionalValues ...interface{}) string {
 	}
 	return fmt.Sprintf("nc -w 4 %s", endpoint)
 }
+
+// CiliumMonitorHost is a wrapper for running `cilium monitor` with timestamps
+// prepended to each line of its output using `ts`.
+func CiliumMonitorHost() string {
+	return fmt.Sprintf(`cilium monitor | ts '[%%Y-%%m-%%d %%H:%%M:%%S]'`)
+}
+
+// CiliumMonitorHost is a wrapper for running `cilium monitor` with timestamps
+// prepended to each line of its output using `ts` in the specified pod / namespace.
+func CiliumMonitorPod(podName, namespace string) string {
+	return fmt.Sprintf(`%s exec %s -n %s -it -- cilium monitor | ts '[%%Y-%%m-%%d %%H:%%M:%%S]'`, KubectlCmd, podName, namespace)
+}
