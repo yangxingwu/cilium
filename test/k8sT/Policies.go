@@ -17,6 +17,7 @@ package k8sTest
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/go-openapi/swag"
 	. "github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
+
 	"k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -471,8 +473,13 @@ var _ = Describe("K8sValidatedPolicyTest", func() {
 			webPolicyName             = "guestbook-web"
 		)
 
-		var ciliumPod, ciliumPod2 string
-		var err error
+		var (
+			ciliumPod, ciliumPod2                     string
+			err                                       error
+			monitorCtx                                context.Context
+			monitorCancel                             context.CancelFunc
+			ciliumPodMonitorRes, ciliumPod2MonitorRes *helpers.CmdRes
+		)
 
 		BeforeEach(func() {
 			kubectl.Apply(kubectl.ManifestGet(deployment))
@@ -482,16 +489,47 @@ var _ = Describe("K8sValidatedPolicyTest", func() {
 
 			ciliumPod2, err = kubectl.GetCiliumPodOnNode(helpers.KubeSystemNamespace, helpers.K8s2)
 			Expect(err).Should(BeNil())
+
+			monitorCtx, monitorCancel = context.WithCancel(context.Background())
+			By(fmt.Sprintf("Starting monitor on pod %s", ciliumPod))
+			ciliumPodMonitorRes = kubectl.ExecContext(monitorCtx, helpers.CiliumMonitorPod(ciliumPod, helpers.KubeSystemNamespace))
+
+			By(fmt.Sprintf("Starting monitor on pod %s", ciliumPod2))
+			ciliumPod2MonitorRes = kubectl.ExecContext(monitorCtx, helpers.CiliumMonitorPod(ciliumPod2, helpers.KubeSystemNamespace))
 		})
 
 		AfterFailed(func() {
 			kubectl.CiliumReport(helpers.KubeSystemNamespace, []string{
 				"cilium service list",
 				"cilium endpoint list"})
+
+			ciliumPodMonitorRes.CombineOutput()
+
+			podMonitorOutput := map[string]*helpers.CmdRes{
+				ciliumPod:  ciliumPodMonitorRes,
+				ciliumPod2: ciliumPod2MonitorRes,
+			}
+
+			testPath, err := helpers.CreateReportDirectory()
+			if err != nil {
+				logger.WithError(err).Errorf("cannot create test result path '%s'", testPath)
+				return
+			}
+
+			for podName, monitorRes := range podMonitorOutput {
+				err := ioutil.WriteFile(
+					fmt.Sprintf("%s/%s", testPath,
+						fmt.Sprintf("cilium-monitor-%s.log", podName)),
+					monitorRes.CombineOutput().Bytes(), helpers.LogPerm)
+				if err != nil {
+					log.WithError(err).Errorf("cannot save monitor output")
+				}
+			}
 		})
 
 		JustAfterEach(func() {
 			kubectl.ValidateNoErrorsOnLogs(CurrentGinkgoTestDescription().Duration)
+			monitorCancel()
 		})
 
 		getPolicyCmd := func(policy string) string {
