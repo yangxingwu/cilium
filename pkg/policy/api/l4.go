@@ -72,4 +72,12 @@ type L7Rules struct {
 	//
 	// +optional
 	Kafka []PortRuleKafka `json:"kafka,omitempty"`
+
+	// If set, it will guarantee that the provided L7 rules are always
+	// evaluated even if n L4 or L7 rule exists which allows all L7
+	// requests. This can be used to guarantee visibility of L7 access log
+	// records in existence of eventual L4 allow all rules.
+	//
+	// +optional
+	Persistent bool `json:"persistent,omitempty"`
 }
