@@ -139,12 +139,6 @@ build-deb:
 build-rpm:
 	$(MAKE) -C ./contrib/packaging/rpm
 
-runtime-tests:
-	$(MAKE) -C tests runtime-tests
-
-k8s-tests:
-	$(MAKE) -C tests k8s-tests
-
 generate-api: api/v1/openapi.yaml
 	@$(ECHO_GEN)api/v1/openapi.yaml
 	-$(SWAGGER) generate server -s server -a restapi \
