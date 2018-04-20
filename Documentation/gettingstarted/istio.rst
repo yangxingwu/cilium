@@ -129,15 +129,25 @@ like above (a ``READY`` value of ``0`` is OK for this tutorial).
 Step 2: Install Istio
 =====================
 
-Download `Istio version 0.7.0
-<https://github.com/istio/istio/releases/tag/0.7.0>`_:
+Download `Istio version 0.8.0-pre20180419-09-15
+<https://github.com/istio/istio/releases/>`_:
 
-::
+.. tabs::
+  .. group-tab:: Linux
 
-    $ export ISTIO_VERSION=0.7.0
-    $ curl -L https://git.io/getLatestIstio | sh -
-    $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
-    $ export PATH="$PATH:${ISTIO_HOME}/bin"
+    ::
+
+      $ export ISTIO_VERSION=0.8.0-pre20180419-09-15
+      $ curl -L https://storage.googleapis.com/istio-prerelease/daily-build/${ISTIO_VERSION}/istio-${ISTIO_VERSION}-linux.tar.gz | tar xz
+      $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
+      $ export PATH="${ISTIO_HOME}/bin:${PATH}"
+
+  .. group-tab:: macOS
+
+      $ export ISTIO_VERSION=0.8.0-pre20180419-09-15
+      $ curl -L https://storage.googleapis.com/istio-prerelease/daily-build/${ISTIO_VERSION}/istio-${ISTIO_VERSION}-osx.tar.gz | tar xz
+      $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
+      $ export PATH="${ISTIO_HOME}/bin:${PATH}"
 
 Deploy Istio on Kubernetes, with a Cilium-specific variant of Pilot which
 injects the Cilium network policy filters into each Istio sidecar proxy:
@@ -145,7 +155,8 @@ injects the Cilium network policy filters into each Istio sidecar proxy:
 ::
 
     $ sed -e 's,docker\.io/istio/pilot:,docker.io/cilium/istio_pilot:,' \
-          < ${ISTIO_HOME}/install/kubernetes/istio.yaml | \
+          -e 's/mtlsExcludedServices: \[\(.*\)\]/mtlsExcludedServices: [\1, "kafka.default.svc.cluster.local"]/' \
+          < ${ISTIO_HOME}/install/kubernetes/istio-auth.yaml | \
           kubectl create -f -
 
 Configure Istio's sidecar injection to use Cilium's Docker images for the
