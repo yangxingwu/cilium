@@ -19,7 +19,7 @@ dependency.
 
 ::
 
-    $ minikube start --network-plugin=cni --bootstrapper=localkube --memory=4096 --extra-config=apiserver.Authorization.Mode=RBAC
+    $ minikube start --network-plugin=cni --bootstrapper=localkube --memory=5120 --extra-config=apiserver.Authorization.Mode=RBAC
 
 After minikube has finished setting up your new Kubernetes cluster, you can
 check the status of the cluster by running ``kubectl get cs``:
@@ -38,7 +38,6 @@ Bind the Kubernetes system account to the ``cluster-admin`` role to enable the
 ::
 
     $ kubectl create clusterrolebinding kube-system-default-binding-cluster-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
-
 
 4. Install etcd as a dependency of cilium in minikube by running:
 

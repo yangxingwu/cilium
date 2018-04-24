@@ -29,6 +29,16 @@ Cilium pod will run in the ``kube-system`` namespace along with all
 other system relevant daemons and services.  The Cilium pod will run
 both the Cilium agent and the Cilium CNI plugin.
 
+This document relies on the ``sed`` command referring to `GNU sed
+<https://www.gnu.org/software/sed/>`_.  Verify that it is the case in
+your environment, and install GNU sed if it is not the case:
+
+::
+
+    $ sed --version | head -n 2
+    sed (GNU sed) 4.4
+    Copyright (C) 2017 Free Software Foundation, Inc.
+
 To deploy Cilium, run:
 
 .. tabs::
@@ -129,31 +139,74 @@ like above (a ``READY`` value of ``0`` is OK for this tutorial).
 Step 2: Install Istio
 =====================
 
-Download `Istio version 0.7.0
-<https://github.com/istio/istio/releases/tag/0.7.0>`_:
+.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
+
+Temporarily disable policy enforcement in Cilium:
 
 ::
 
-    $ export ISTIO_VERSION=0.7.0
-    $ curl -L https://git.io/getLatestIstio | sh -
-    $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
-    $ export PATH="$PATH:${ISTIO_HOME}/bin"
+    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=never
+
+Wait until all endpoints are in the ``ready`` state:
+
+::
+
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
+    ready
+
+Download `Istio version 0.8.0 RC2 (0.8.0-pre20180421-09-15)
+<https://github.com/istio/istio/releases/>`_:
+
+.. TODO: Update the ISTIO_VERSION to 0.8.0 once released.
+   $ export ISTIO_VERSION=0.8.0
+   $ curl -L https://git.io/getLatestIstio | sh -
+   $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
+   $ export PATH="$PATH:${ISTIO_HOME}/bin"
+
+.. tabs::
+  .. group-tab:: Linux
+
+    ::
+
+      $ export ISTIO_VERSION=0.8.0-pre20180421-09-15
+      $ curl -L https://storage.googleapis.com/istio-prerelease/daily-build/${ISTIO_VERSION}/istio-${ISTIO_VERSION}-linux.tar.gz | tar xz
+      $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
+      $ export PATH="${ISTIO_HOME}/bin:${PATH}"
+
+  .. group-tab:: macOS
+
+    ::
+
+      $ export ISTIO_VERSION=0.8.0-pre20180421-09-15
+      $ curl -L https://storage.googleapis.com/istio-prerelease/daily-build/${ISTIO_VERSION}/istio-${ISTIO_VERSION}-osx.tar.gz | tar xz
+      $ export ISTIO_HOME=`pwd`/istio-${ISTIO_VERSION}
+      $ export PATH="${ISTIO_HOME}/bin:${PATH}"
 
 Deploy Istio on Kubernetes, with a Cilium-specific variant of Pilot which
-injects the Cilium network policy filters into each Istio sidecar proxy:
+injects the Cilium network policy filters into each Istio sidecar proxy, and
+with Istio's sidecar injection configured to setup the transparent proxy mode
+(TPROXY) as required by Cilium's proxy filters:
 
 ::
 
-    $ sed -e 's,docker\.io/istio/pilot:,docker.io/cilium/istio_pilot:,' \
-          < ${ISTIO_HOME}/install/kubernetes/istio.yaml | \
+    $ sed -e 's,image: ".*/pilot:,image: "docker.io/cilium/istio_pilot:,' \
+          -e 's,interceptionMode: .*,interceptionMode: TPROXY,' \
+          -e 's/mtlsExcludedServices: \[\(.*\)\]/mtlsExcludedServices: [\1, "kafka.default.svc.cluster.local"]/' \
+          < ${ISTIO_HOME}/install/kubernetes/istio-auth.yaml | \
           kubectl create -f -
 
 Configure Istio's sidecar injection to use Cilium's Docker images for the
-sidecar proxies:
+sidecar proxies and to mount Cilium's API Unix domain sockets into each sidecar
+to allow Cilium's Envoy filters to query the Cilium agent:
 
-.. parsed-literal::
+::
 
-    $ kubectl create -f \ |SCM_WEB|\/examples/kubernetes-istio/istio-sidecar-injector-configmap-release.yaml
+    $ istioctl kube-inject --emitTemplate --debug --imagePullPolicy=IfNotPresent | \
+          sed -e 's,[^" ]*/proxy_debug:,docker.io/cilium/istio_proxy_debug:,' \
+              -e 's,^\(.*\)volumeMounts:$,&\n\1- mountPath: /var/run/cilium\n\1  name: cilium-unix-sock-dir,' \
+              -e 's,^\(.*\)volumes:$,&\n\1- hostPath:\n\1    path: /var/run/cilium\n\1  name: cilium-unix-sock-dir,' \
+          > istio-inject-config.yaml
 
 Check the progress of the deployment (every service should have an
 ``AVAILABLE`` count of ``1``):
@@ -161,11 +214,14 @@ Check the progress of the deployment (every service should have an
 ::
 
     $ kubectl get deployments -n istio-system
-    NAME            DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-    istio-ca        1         1         1            1           2m
-    istio-ingress   1         1         1            1           2m
-    istio-mixer     1         1         1            1           2m
-    istio-pilot     1         1         1            1           2m
+    NAME                       DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+    istio-citadel              1         1         1            1           2m
+    istio-ingress              1         1         1            1           2m
+    istio-pilot                1         1         1            1           2m
+    istio-policy               1         1         1            1           2m
+    istio-statsd-prom-bridge   1         1         1            1           2m
+    istio-telemetry            1         1         1            1           2m
+    prometheus                 1         1         1            1           2m
 
 Once all Istio pods are ready, we are ready to install the demo
 application.
@@ -200,27 +256,16 @@ into Kubernetes using separate YAML files which define:
    :scale: 75 %
    :align: center
 
-Each Deployment must be packaged with Istio's Envoy sidecar proxy in
-order to be managed by Istio, by running the ``istioctl kube-inject``
-command on each YAML file.  The resulting YAML files must then be
-adapted to mount Cilium's API Unix domain sockets into the sidecar to
-allow Cilium's Envoy filters to query the Cilium agent.  This
-adaptation can be done with the ``cilium-kube-inject.sed`` script:
-
-.. parsed-literal::
-
-    $ curl -s \ |SCM_WEB|\/examples/kubernetes-istio/cilium-kube-inject.sed > ./cilium-kube-inject.sed
-
 To package the Istio sidecar proxy and generate final YAML
 specifications, run:
 
 .. parsed-literal::
 
-    $ for service in productpage-service productpage-v1 details-v1 reviews-v1; do \\
+    $ for service in productpage-ingress productpage-service productpage-v1 details-v1 reviews-v1; do \\
           curl -s \ |SCM_WEB|\/examples/kubernetes-istio/bookinfo-${service}.yaml | \\
-          istioctl kube-inject --injectConfigMapName istio-inject -f - | \\
-          sed -f ./cilium-kube-inject.sed | \\
+          istioctl kube-inject --injectConfigFile istio-inject-config.yaml -f - | \\
           kubectl create -f - ; done
+    ingress "gateway" created
     service "productpage" created
     ciliumnetworkpolicy "productpage-v1" created
     deployment "productpage-v1" created
@@ -246,7 +291,7 @@ To obtain the URL to the frontend productpage service, run:
 
 ::
 
-    $ export PRODUCTPAGE=`minikube service productpage -n default --url`
+    $ export PRODUCTPAGE=`minikube service istio-ingress -n istio-system --url | head -n 1`
     $ echo "Open URL: ${PRODUCTPAGE}/productpage"
 
 Open that URL in your web browser and check that the application has
@@ -279,7 +324,7 @@ Apply this route rule:
 .. parsed-literal::
 
     $ kubectl apply -f \ |SCM_WEB|\/examples/kubernetes-istio/route-rule-reviews-v1.yaml
-    routerule "reviews-default" created
+    routerule.config.istio.io "reviews-default" created
     
 Deploy the ``ratings v1`` and ``reviews v2`` services:
 
@@ -287,8 +332,7 @@ Deploy the ``ratings v1`` and ``reviews v2`` services:
 
     $ for service in ratings-v1 reviews-v2; do \\
           curl -s \ |SCM_WEB|\/examples/kubernetes-istio/bookinfo-${service}.yaml | \\
-          istioctl kube-inject --injectConfigMapName istio-inject -f - | \\
-          sed -f ./cilium-kube-inject.sed | \\
+          istioctl kube-inject --injectConfigFile istio-inject-config.yaml -f - | \\
           kubectl create -f - ; done
     service "ratings" created
     ciliumnetworkpolicy "ratings-v1" created
@@ -318,6 +362,22 @@ that all reviews are retrieved from ``reviews v1`` and none from
    :scale: 50 %
    :align: center
 
+.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
+
+Re-enable policy enforcement in Cilium:
+
+::
+
+    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=default
+
+Wait until all endpoints are in the ``ready`` state:
+
+::
+
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
+    ready ready ready ready ready ready ready ready ready ready ready ready ready
+
 The ``ratings-v1`` CiliumNetworkPolicy explicitly whitelists access
 to the ``ratings`` API only from ``productpage`` and ``reviews v2``:
 
@@ -334,7 +394,7 @@ running ``curl`` from within the pod:
       % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
       0     0    0     0    0     0      0      0 --:--:--  0:00:05 --:--:--     0
-    curl: (28) Connection timed out after 5000 milliseconds
+    upstream connect error or disconnect/reset before headers
 
 Update the Istio route rule to send 50% of ``reviews`` traffic to
 ``v1`` and 50% to ``v2``:
@@ -350,7 +410,7 @@ Apply this route rule:
 .. parsed-literal::
 
     $ kubectl apply -f \ |SCM_WEB|\/examples/kubernetes-istio/route-rule-reviews-v1-v2.yaml
-    routerule "reviews-default" configured
+    routerule.config.istio.io "reviews-default" configured
 
 Check in your web browser that stars are appearing in the Book Reviews
 roughly 50% of the time.  This may require refreshing the page for a
@@ -375,7 +435,7 @@ Apply this route rule:
 .. parsed-literal::
 
     $ kubectl apply -f \ |SCM_WEB|\/examples/kubernetes-istio/route-rule-reviews-v2.yaml
-    routerule "reviews-default" configured
+    routerule.config.istio.io "reviews-default" configured
 
 Refresh the product page in your web browser several times to verify
 that stars are now appearing in the Book Reviews on every page
@@ -395,16 +455,69 @@ which brings two changes:
 .. image:: images/istio-bookinfo-productpage-v2-kafka.png
    :scale: 75 %
    :align: center
-  
+
+The policy for ``v1`` currently allows read access to the full HTTP
+REST API, under the ``/api/v1`` HTTP URI path:
+
+- ``/api/v1/products``: Returns the list of books and their details.
+- ``/api/v1/products/<id>``: Returns details about a specific book.
+- ``/api/v1/products/<id>/reviews``: Returns reviews for a specific
+  book.
+- ``/api/v1/products/<id>/ratings``: Returns ratings for a specific
+  book.
+
+Check that the full REST API is currently accessible in ``v1`` and
+returns valid JSON data:
+
+::
+
+    $ export PRODUCTPAGE=`minikube service istio-ingress -n istio-system --url | head -n 1`
+    $ for APIPATH in /api/v1/products /api/v1/products/0 /api/v1/products/0/reviews /api/v1/products/0/ratings; do echo ; curl -s -S "${PRODUCTPAGE}${APIPATH}" ; echo ; done
+
+    [{"descriptionHtml": "<a href=\"https://en.wikipedia.org/wiki/The_Comedy_of_Errors\">Wikipedia Summary</a>: The Comedy of Errors is one of <b>William Shakespeare's</b> early plays. It is his shortest and one of his most farcical comedies, with a major part of the humour coming from slapstick and mistaken identity, in addition to puns and word play.", "id": 0, "title": "The Comedy of Errors"}]
+
+    {"publisher": "PublisherA", "language": "English", "author": "William Shakespeare", "id": 0, "ISBN-10": "1234567890", "ISBN-13": "123-1234567890", "year": 1595, "type": "paperback", "pages": 200}
+
+    {"reviews": [{"reviewer": "Reviewer1", "rating": {"color": "black", "stars": 5}, "text": "An extremely entertaining play by Shakespeare. The slapstick humour is refreshing!"}, {"reviewer": "Reviewer2", "rating": {"color": "black", "stars": 4}, "text": "Absolutely fun and entertaining. The play lacks thematic depth when compared to other plays by Shakespeare."}], "id": "0"}
+
+    {"ratings": {"Reviewer2": 4, "Reviewer1": 5}, "id": 0}
+
+We realized that the REST API to get the book reviews and ratings was
+meant only for consumption by other internal services, and will be
+blocked from external clients using the updated Layer-7
+CiliumNetworkPolicy in ``productpage v2``, i.e. only the
+``/api/v1/products`` and ``/api/v1/products/<id>`` HTTP URLs will be
+whitelisted:
+
+.. literalinclude:: ../../examples/kubernetes-istio/bookinfo-productpage-v2-policy.yaml
+
+.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
+
+Temporarily disable policy enforcement in Cilium:
+
+::
+
+    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=never
+
+Wait until all endpoints are in the ``ready`` state:
+
+::
+
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
+    ready ready ready ready ready ready ready ready ready ready ready ready ready
+
 Because ``productpage v2`` sends messages into Kafka, we must first
 deploy a Kafka broker:
 
+.. TODO: Re-enable sidecar injection after we support Kafka with mTLS.
+    $ curl -s \ |SCM_WEB|\/examples/kubernetes-istio/kafka-v1.yaml | \\
+          istioctl kube-inject --injectConfigFile istio-inject-config.yaml -f - | \\
+          kubectl create -f -
+
 .. parsed-literal::
 
-    $ curl -s \ |SCM_WEB|\/examples/kubernetes-istio/kafka-v1.yaml | \\
-          istioctl kube-inject --injectConfigMapName istio-inject -f - | \\
-          sed -f ./cilium-kube-inject.sed | \\
-          kubectl create -f -
+    $ kubectl create -f \ |SCM_WEB|\/examples/kubernetes-istio/kafka-v1.yaml
     service "kafka" created
     ciliumnetworkpolicy "kafka-authaudit" created
     statefulset "kafka-v1" created
@@ -428,91 +541,22 @@ Create the ``authaudit`` Kafka topic, which will be used by
 
 We are now ready to deploy ``productpage v2``.
 
-The policy for ``v1`` currently allows read access to the full HTTP
-REST API, under the ``/api/v1`` HTTP URI path:
-
-- ``/api/v1/products``: Returns the list of books and their details.
-- ``/api/v1/products/<id>``: Returns details about a specific book.
-- ``/api/v1/products/<id>/reviews``: Returns reviews for a specific
-  book.
-- ``/api/v1/products/<id>/ratings``: Returns ratings for a specific
-  book.
-
-Check that the full REST API is currently accessible in ``v1`` and
-returns valid JSON data:
-
-::
-
-    $ export PRODUCTPAGE=`minikube service productpage -n default --url`
-    $ for APIPATH in /api/v1/products /api/v1/products/0 /api/v1/products/0/reviews /api/v1/products/0/ratings; do echo ; curl -s -S "${PRODUCTPAGE}${APIPATH}" ; echo ; done
-    
-    [{"descriptionHtml": "<a href=\"https://en.wikipedia.org/wiki/The_Comedy_of_Errors\">Wikipedia Summary</a>: The Comedy of Errors is one of <b>William Shakespeare's</b> early plays. It is his shortest and one of his most farcical comedies, with a major part of the humour coming from slapstick and mistaken identity, in addition to puns and word play.", "id": 0, "title": "The Comedy of Errors"}]
-
-    {"publisher": "PublisherA", "language": "English", "author": "William Shakespeare", "id": 0, "ISBN-10": "1234567890", "ISBN-13": "123-1234567890", "year": 1595, "type": "paperback", "pages": 200}
-
-    {"reviews": [{"reviewer": "Reviewer1", "rating": {"color": "black", "stars": 5}, "text": "An extremely entertaining play by Shakespeare. The slapstick humour is refreshing!"}, {"reviewer": "Reviewer2", "rating": {"color": "black", "stars": 4}, "text": "Absolutely fun and entertaining. The play lacks thematic depth when compared to other plays by Shakespeare."}], "id": "0"}
-
-    {"ratings": {"Reviewer2": 4, "Reviewer1": 5}, "id": 0}
-
-We realized that the REST API to get the book reviews and ratings was
-meant only for consumption by other internal services, and will be
-blocked from external clients using the updated Layer-7
-CiliumNetworkPolicy in ``productpage v2``, i.e. only the
-``/api/v1/products`` and ``/api/v1/products/<id>`` HTTP URLs will be
-whitelisted:
-
-.. literalinclude:: ../../examples/kubernetes-istio/bookinfo-productpage-v2-policy.yaml
-
 Create the ``productpage v2`` service and its updated
 CiliumNetworkPolicy and delete ``productpage v1``:
 
 .. parsed-literal::
 
     $ curl -s \ |SCM_WEB|\/examples/kubernetes-istio/bookinfo-productpage-v2.yaml | \\
-          istioctl kube-inject --injectConfigMapName istio-inject -f - | \\
-          sed -f ./cilium-kube-inject.sed | \\
+          istioctl kube-inject --injectConfigFile istio-inject-config.yaml -f - | \\
           kubectl create -f -
     ciliumnetworkpolicy "productpage-v2" created
     deployment "productpage-v2" created
 
     $ kubectl delete -f \ |SCM_WEB|\/examples/kubernetes-istio/bookinfo-productpage-v1.yaml
+    ciliumnetworkpolicy "productpage-v1" deleted
+    deployment "productpage-v1" deleted
 
-Check the progress of the deployment (every service should have an
-``AVAILABLE`` count of ``1``):
-
-::
-
-    $ kubectl get deployments -n default
-    NAME             DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-    details-v1       1         1         1            1           15m
-    productpage-v2   1         1         1            1           1m
-    ratings-v1       1         1         1            1           10m
-    reviews-v1       1         1         1            1           15m
-    reviews-v2       1         1         1            1           10m
-
-Check that the product REST API is still accessible, and that Cilium
-now denies at Layer-7 any access to the reviews and ratings REST API:
-
-::
-
-    $ export PRODUCTPAGE=`minikube service productpage -n default --url`
-    $ for APIPATH in /api/v1/products /api/v1/products/0 /api/v1/products/0/reviews /api/v1/products/0/ratings; do echo ; curl -s -S "${PRODUCTPAGE}${APIPATH}" ; echo ; done
-
-    [{"descriptionHtml": "<a href=\"https://en.wikipedia.org/wiki/The_Comedy_of_Errors\">Wikipedia Summary</a>: The Comedy of Errors is one of <b>William Shakespeare's</b> early plays. It is his shortest and one of his most farcical comedies, with a major part of the humour coming from slapstick and mistaken identity, in addition to puns and word play.", "id": 0, "title": "The Comedy of Errors"}]
-
-    {"publisher": "PublisherA", "language": "English", "author": "William Shakespeare", "id": 0, "ISBN-10": "1234567890", "ISBN-13": "123-1234567890", "year": 1595, "type": "paperback", "pages": 200}
-
-    Access denied
-
-
-    Access denied
-
-This demonstrated that requests to the
-``/api/v1/products/<id>/reviews`` and
-``/api/v1/products/<id>/ratings`` URIs now result in Cilium returning
-``HTTP 403 Forbidden`` HTTP responses.
-
-``productpage v2`` also implements an authorization audit logging.  On
+``productpage v2`` implements an authorization audit logging.  On
 every user login or logout, it produces into Kafka topic ``authaudit``
 a JSON-formatted message which contains the following information:
 
@@ -529,9 +573,9 @@ this service:
 .. parsed-literal::
 
     $ curl -s \ |SCM_WEB|\/examples/kubernetes-istio/authaudit-logger-v1.yaml | \\
-          istioctl kube-inject --injectConfigMapName istio-inject -f - | \\
-          sed -f ./cilium-kube-inject.sed | \\
+          istioctl kube-inject --injectConfigFile istio-inject-config.yaml -f - | \\
           kubectl apply -f -
+    deployment "authaudit-logger-v1" created
 
 Check the progress of the deployment (every service should have an
 ``AVAILABLE`` count of ``1``):
@@ -540,12 +584,50 @@ Check the progress of the deployment (every service should have an
 
     $ kubectl get deployments -n default
     NAME                  DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-    authaudit-logger-v1   1         1         1            1           23s
-    details-v1            1         1         1            1           16m
-    productpage-v2        1         1         1            1           2m
-    ratings-v1            1         1         1            1           11m
-    reviews-v1            1         1         1            1           16m
-    reviews-v2            1         1         1            1           11m
+    authaudit-logger-v1   1         1         1            1           20s
+    details-v1            1         1         1            1           22m
+    productpage-v2        1         1         1            1           4m
+    ratings-v1            1         1         1            1           19m
+    reviews-v1            1         1         1            1           22m
+    reviews-v2            1         1         1            1           19m
+
+.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
+
+Re-enable policy enforcement in Cilium:
+
+::
+
+    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=default
+
+Wait until all endpoints are in the ``ready`` state:
+
+::
+
+    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
+    ready ready ready ready ready ready ready ready ready ready ready ready ready ready ready
+
+Check that the product REST API is still accessible, and that Cilium
+now denies at Layer-7 any access to the reviews and ratings REST API:
+
+::
+
+    $ export PRODUCTPAGE=`minikube service istio-ingress -n istio-system --url | head -n 1`
+    $ for APIPATH in /api/v1/products /api/v1/products/0 /api/v1/products/0/reviews /api/v1/products/0/ratings; do echo ; curl -s -S "${PRODUCTPAGE}${APIPATH}" ; echo ; done
+
+    [{"descriptionHtml": "<a href=\"https://en.wikipedia.org/wiki/The_Comedy_of_Errors\">Wikipedia Summary</a>: The Comedy of Errors is one of <b>William Shakespeare's</b> early plays. It is his shortest and one of his most farcical comedies, with a major part of the humour coming from slapstick and mistaken identity, in addition to puns and word play.", "id": 0, "title": "The Comedy of Errors"}]
+
+    {"publisher": "PublisherA", "language": "English", "author": "William Shakespeare", "id": 0, "ISBN-10": "1234567890", "ISBN-13": "123-1234567890", "year": 1595, "type": "paperback", "pages": 200}
+
+    Access denied
+
+
+    Access denied
+
+This demonstrated that requests to the
+``/api/v1/products/<id>/reviews`` and
+``/api/v1/products/<id>/ratings`` URIs now result in Cilium returning
+``HTTP 403 Forbidden`` HTTP responses.
 
 Every login and logout on the product page will result in a line in
 this service's log:
