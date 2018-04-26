@@ -25,6 +25,7 @@ import (
 	"github.com/cilium/cilium/common"
 	"github.com/cilium/cilium/daemon/options"
 	e "github.com/cilium/cilium/pkg/endpoint"
+	"github.com/cilium/cilium/pkg/endpointmanager"
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/kvstore"
 	"github.com/cilium/cilium/pkg/labels"
@@ -132,6 +133,8 @@ func (ds *DaemonSuite) SetUpTest(c *C) {
 }
 
 func (ds *DaemonSuite) TearDownTest(c *C) {
+	endpointmanager.RemoveAll()
+
 	if ds.d != nil {
 		os.RemoveAll(ds.d.conf.RunDir)
 	}
@@ -175,7 +178,7 @@ func (e *DaemonConsulSuite) TearDownTest(c *C) {
 	e.DaemonSuite.TearDownTest(c)
 }
 
-func (ds *DaemonSuite) TestMiniumWorkerThreadsIsSet(c *C) {
+func (ds *DaemonSuite) TestMinimumWorkerThreadsIsSet(c *C) {
 	c.Assert(numWorkerThreads() >= 4, Equals, true)
 	c.Assert(numWorkerThreads() >= runtime.NumCPU(), Equals, true)
 }

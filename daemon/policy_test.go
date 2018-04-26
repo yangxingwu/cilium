@@ -444,12 +444,15 @@ func (ds *DaemonSuite) TestRemovePolicy(c *C) {
 		os.RemoveAll("1")
 		os.RemoveAll("1_backup")
 	}()
+	buildSuccess := <-e.Regenerate(ds.d, "test")
+	c.Assert(buildSuccess, Equals, true)
+
 	e.SetIdentity(qaBarSecLblsCtx)
 	e.Mutex.Lock()
 	ready := e.SetStateLocked(endpoint.StateWaitingToRegenerate, "test")
 	e.Mutex.Unlock()
 	c.Assert(ready, Equals, true)
-	buildSuccess := <-e.Regenerate(ds.d, "test")
+	buildSuccess = <-e.Regenerate(ds.d, "test")
 	c.Assert(buildSuccess, Equals, true)
 
 	// Check that the policy has been updated in the xDS cache for the L7

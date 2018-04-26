@@ -576,6 +576,12 @@ func (e *Endpoint) regeneratePolicy(owner Owner, opts models.ConfigurationMap) (
 
 	c := e.Consumable
 
+	// Containers without a security identity are not accessible
+	if c == nil {
+		e.getLogger().Warn("Endpoint lacks identity, skipping policy calculation")
+		return false, nil
+	}
+
 	// We may update the consumable, serialize access between endpoints sharing it
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()

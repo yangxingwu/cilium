@@ -43,6 +43,10 @@ const (
 
 	// IDNameHealth is the label used for the local cilium-health endpoint
 	IDNameHealth = "health"
+
+	// IDNameInit is the label used to identify any endpoint that has not
+	// received any labels yet.
+	IDNameInit = "init"
 )
 
 // OpLabels represents the the possible types.
@@ -421,7 +425,7 @@ func (l Labels) DeepCopy() Labels {
 
 // NewLabelsFromModel creates labels from string array.
 func NewLabelsFromModel(base []string) Labels {
-	lbls := Labels{}
+	lbls := make(Labels, len(base))
 	for _, v := range base {
 		if lbl := ParseLabel(v); lbl.Key != "" {
 			lbls[lbl.Key] = lbl
@@ -439,7 +443,7 @@ func NewLabelsFromSortedList(list string) Labels {
 // NewSelectLabelArrayFromModel parses a slice of strings and converts them
 // into an array of selecting labels.
 func NewSelectLabelArrayFromModel(base []string) LabelArray {
-	lbls := LabelArray{}
+	lbls := make(LabelArray, 0, len(base))
 	for _, v := range base {
 		lbls = append(lbls, ParseSelectLabel(v))
 	}
