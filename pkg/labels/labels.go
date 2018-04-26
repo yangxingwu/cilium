@@ -595,17 +595,6 @@ func ParseSelectLabel(str string) *Label {
 	return lbl
 }
 
-// ParseStringLabels returns label representations from strings.
-func ParseStringLabels(strLbls []string) Labels {
-	lbls := Labels{}
-	for _, l := range strLbls {
-		lbl := ParseLabel(l)
-		lbls[lbl.Key] = lbl
-	}
-
-	return lbls
-}
-
 // generateLabelString generates the string representation of a label with
 // the provided source, key, and value in the format "source:key=value".
 func generateLabelString(source, key, value string) string {
