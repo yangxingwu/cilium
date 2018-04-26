@@ -43,7 +43,6 @@ import (
 	cilium_v2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
 	clientset "github.com/cilium/cilium/pkg/k8s/client/clientset/versioned"
 	cilium_client_v2 "github.com/cilium/cilium/pkg/k8s/client/clientset/versioned/typed/cilium.io/v2"
-	"github.com/cilium/cilium/pkg/labels"
 	pkgLabels "github.com/cilium/cilium/pkg/labels"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/logging/logfields"
@@ -559,7 +558,7 @@ func (e *Endpoint) RunK8sCiliumEndpointSync() {
 		endpointID     = e.ID
 		controllerName = fmt.Sprintf("sync-to-k8s-ciliumendpoint (%v)", endpointID)
 		scopedLog      = e.getLogger().WithField("controller", controllerName)
-		healthLbls     = labels.Labels{labels.IDNameHealth: labels.NewLabel(labels.IDNameHealth, "", labels.LabelSourceReserved)}
+		healthLbls     = pkgLabels.Labels{pkgLabels.IDNameHealth: pkgLabels.NewLabel(pkgLabels.IDNameHealth, "", pkgLabels.LabelSourceReserved)}
 	)
 
 	if !k8s.IsEnabled() {
@@ -2146,7 +2145,7 @@ func (e *Endpoint) getIDandLabels() string {
 // labels can be added or deleted. If a net label changed is performed, the
 // endpoint will receive a new identity and will be regenerated. Both of these
 // operations will happen in the background.
-func (e *Endpoint) ModifyIdentityLabels(owner Owner, addLabels, delLabels labels.Labels) error {
+func (e *Endpoint) ModifyIdentityLabels(owner Owner, addLabels, delLabels pkgLabels.Labels) error {
 	e.Mutex.Lock()
 	defer e.Mutex.Unlock()
 
@@ -2206,6 +2205,14 @@ func (e *Endpoint) ModifyIdentityLabels(owner Owner, addLabels, delLabels labels
 	return nil
 }
 
+// IsInit returns true if the endpoint still hasn't received identity labels,
+// i.e. has the special identity with label reserved:init.
+func (e *Endpoint) IsInit() bool {
+	lbls := e.OpLabels.IdentityLabels()
+	init := lbls[pkgLabels.IDNameInit]
+	return init != nil && init.Source == pkgLabels.LabelSourceReserved
+}
+
 // UpdateLabels is called to update the labels of an endpoint. Calls to this
 // function do not necessarily mean that the labels actually changed. The
 // container runtime layer will periodically synchronize labels.
@@ -2213,7 +2220,7 @@ func (e *Endpoint) ModifyIdentityLabels(owner Owner, addLabels, delLabels labels
 // If a net label changed was performed, the endpoint will receive a new
 // identity and will be regenerated. Both of these operations will happen in
 // the background.
-func (e *Endpoint) UpdateLabels(owner Owner, identityLabels, infoLabels labels.Labels) {
+func (e *Endpoint) UpdateLabels(owner Owner, identityLabels, infoLabels pkgLabels.Labels) {
 	log.WithFields(logrus.Fields{
 		logfields.ContainerID:    e.GetShortContainerID(),
 		logfields.EndpointID:     e.StringID(),
