@@ -105,7 +105,7 @@ var _ = Describe("RuntimeValidatedCLI", func() {
 			res = vm.Exec(`cilium identity list`)
 			resSingleOut = res.SingleOut()
 
-			reservedIdentities := []string{"health", "cluster", "host", "world"}
+			reservedIdentities := []string{"health", "cluster", "host", "world", "init"}
 
 			for _, id := range reservedIdentities {
 				By(fmt.Sprintf("checking that reserved identity '%s' is in 'cilium identity list' output", id))
