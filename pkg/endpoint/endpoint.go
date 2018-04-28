@@ -1940,7 +1940,7 @@ func (e *Endpoint) SetStateLocked(toState, reason string) bool {
 		}
 	case StateReady:
 		switch toState {
-		case StateDisconnecting, StateWaitingToRegenerate:
+		case StateWaitingForIdentity, StateDisconnecting, StateWaitingToRegenerate:
 			goto OKState
 		}
 	case StateDisconnecting:
@@ -1953,7 +1953,7 @@ func (e *Endpoint) SetStateLocked(toState, reason string) bool {
 	case StateWaitingToRegenerate:
 		switch toState {
 		// Note that transitions to waiting-to-regenerate state
-		case StateDisconnecting:
+		case StateWaitingForIdentity, StateDisconnecting:
 			goto OKState
 		}
 	case StateRegenerating:
@@ -1962,8 +1962,8 @@ func (e *Endpoint) SetStateLocked(toState, reason string) bool {
 		// possible that further changes require a new
 		// build. In this case the endpoint is transitioned
 		// from the regenerating state to
-		// waiting-to-regenerate state.
-		case StateDisconnecting, StateWaitingToRegenerate:
+		// waiting-for-identity or waiting-to-regenerate state.
+		case StateWaitingForIdentity, StateDisconnecting, StateWaitingToRegenerate:
 			goto OKState
 		}
 	case StateRestoring:
