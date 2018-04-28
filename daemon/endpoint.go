@@ -138,8 +138,7 @@ func NewPutEndpointIDHandler(d *Daemon) PutEndpointIDHandler {
 // request that was specified. Returns an HTTP code response code and an
 // error msg (or nil on success).
 func (d *Daemon) createEndpoint(epTemplate *models.EndpointChangeRequest, id string, lbls []string) (int, error) {
-	addLabels := labels.NewLabelsFromModel(lbls)
-	ep, err := endpoint.NewEndpointFromChangeModel(epTemplate, addLabels)
+	ep, err := endpoint.NewEndpointFromChangeModel(epTemplate)
 	if err != nil {
 		return PutEndpointIDInvalidCode, err
 	}
@@ -160,24 +159,26 @@ func (d *Daemon) createEndpoint(epTemplate *models.EndpointChangeRequest, id str
 		return PutEndpointIDFailedCode, err
 	}
 
-	// If the endpoint has no labels, give the endpoint a special identity with
-	// label reserved:init so we can generate a custom policy for it until we
-	// get its actual identity.
-	if len(addLabels) == 0 {
+	addLabels := labels.NewLabelsFromModel(lbls)
+
+	if len(addLabels) > 0 {
+		addLabels, _, ok := checkLabels(addLabels, nil)
+		if !ok {
+			return PutEndpointIDInvalidCode, fmt.Errorf("No valid label")
+		}
+		if lbls := addLabels.FindReserved(); lbls != nil {
+			return PutEndpointIDInvalidCode, fmt.Errorf("Not allowed to add reserved labels: %s", lbls)
+		}
+	} else {
+		// If the endpoint has no labels, give the endpoint a special identity with
+		// label reserved:init so we can generate a custom policy for it until we
+		// get its actual identity.
 		addLabels = labels.Labels{
 			labels.IDNameInit: labels.NewLabel(labels.IDNameInit, "", labels.LabelSourceReserved),
 		}
 	}
 
-	code, err := d.updateEndpointLabels(id, addLabels, labels.Labels{})
-	if err != nil {
-		// XXX: Why should the endpoint remain in this case?
-		log.WithFields(logrus.Fields{
-			logfields.EndpointID:     id,
-			logfields.IdentityLabels: logfields.Repr(addLabels),
-		}).WithError(err).Error("Could not add labels while creating an ep")
-		return code, err
-	}
+	ep.SetIdentityLabels(d, addLabels)
 
 	return PutEndpointIDCreatedCode, nil
 }
@@ -227,8 +228,7 @@ func (h *patchEndpointID) Handle(params PatchEndpointIDParams) middleware.Respon
 
 	// Validate the template. Assignment afterwards is atomic.
 	// Note: newEp's labels are ignored.
-	addLabels := labels.NewLabelsFromModel(params.Endpoint.Labels)
-	newEp, err2 := endpoint.NewEndpointFromChangeModel(epTemplate, addLabels)
+	newEp, err2 := endpoint.NewEndpointFromChangeModel(epTemplate)
 	if err2 != nil {
 		return apierror.Error(PutEndpointIDInvalidCode, err2)
 	}
@@ -315,11 +315,12 @@ func (h *patchEndpointID) Handle(params PatchEndpointIDParams) middleware.Respon
 		}
 	}
 
+	// TODO: Do something with the labels?
+	// addLabels := labels.NewLabelsFromModel(params.Endpoint.Labels)
+
 	// If desired state is waiting-for-identity but identity is already
-	// known and hasn't changed, bump it to ready state immediately to force
-	// re-generation.
-	if ep.GetStateLocked() == endpoint.StateWaitingForIdentity &&
-		ep.SecurityIdentity != nil && ep.SecurityIdentity.Labels.Equals(addLabels) {
+	// known, bump it to ready state immediately to force re-generation
+	if ep.GetStateLocked() == endpoint.StateWaitingForIdentity && ep.SecurityIdentity != nil {
 		ep.SetStateLocked(endpoint.StateReady, "Preparing to force endpoint regeneration because identity is known while handling API PATCH")
 		changed = true
 	}
@@ -661,37 +662,14 @@ func checkLabels(add, del labels.Labels) (addLabels, delLabels labels.Labels, ok
 	return addLabels, delLabels, true
 }
 
-// updateEndpointLabels add and deletes the given labels on given endpoint ID.
-// The received `add` and `del` labels will be filtered with the valid label
-// prefixes.
+// modifyEndpointIdentityLabelsFromAPI adds and deletes the given labels on given endpoint ID.
+// Performs checks for whether the endpoint may be modified by an API call.
+// The received `add` and `del` labels will be filtered with the valid label prefixes.
 // The `add` labels take precedence over `del` labels, this means if the same
 // label is set on both `add` and `del`, that specific label will exist in the
 // endpoint's labels.
 // Returns an HTTP response code and an error msg (or nil on success).
-func (d *Daemon) updateEndpointLabels(id string, add, del labels.Labels) (int, error) {
-	addLabels, delLabels, ok := checkLabels(add, del)
-	if !ok {
-		return 0, nil
-	}
-
-	ep, err := endpointmanager.Lookup(id)
-	if err != nil {
-		return GetEndpointIDInvalidCode, err
-	}
-	if ep == nil {
-		return PatchEndpointIDLabelsNotFoundCode, fmt.Errorf("Endpoint ID %s not found", id)
-	}
-
-	if err := ep.ModifyIdentityLabels(d, addLabels, delLabels); err != nil {
-		return PatchEndpointIDLabelsNotFoundCode, err
-	}
-
-	return PatchEndpointIDLabelsOKCode, nil
-}
-
-// updateEndpointLabelsFromAPI is the same as updateEndpointLabels(), but also
-// performs checks for whether the endpoint may be modified by an API call.
-func (d *Daemon) updateEndpointLabelsFromAPI(id string, add, del labels.Labels) (int, error) {
+func (d *Daemon) modifyEndpointIdentityLabelsFromAPI(id string, add, del labels.Labels) (int, error) {
 	addLabels, delLabels, ok := checkLabels(add, del)
 	if !ok {
 		return 0, nil
@@ -704,7 +682,7 @@ func (d *Daemon) updateEndpointLabelsFromAPI(id string, add, del labels.Labels) 
 
 	ep, err := endpointmanager.Lookup(id)
 	if err != nil {
-		return GetEndpointIDInvalidCode, err
+		return PatchEndpointIDInvalidCode, err
 	}
 	if ep == nil {
 		return PatchEndpointIDLabelsNotFoundCode, fmt.Errorf("Endpoint ID %s not found", id)
@@ -768,7 +746,7 @@ func (h *putEndpointIDLabels) Handle(params PatchEndpointIDLabelsParams) middlew
 		add = nil
 	}
 
-	code, err := d.updateEndpointLabelsFromAPI(params.ID, add, del)
+	code, err := d.modifyEndpointIdentityLabelsFromAPI(params.ID, add, del)
 	if err != nil {
 		return apierror.Error(code, err)
 	}

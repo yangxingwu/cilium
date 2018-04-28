@@ -255,11 +255,11 @@ func (l Labels) Equals(other Labels) bool {
 		return false
 	}
 
-ThisLabelsLoop:
+Loop:
 	for k, lbl1 := range l {
 		if lbl2, ok := other[k]; ok {
 			if lbl1.Source == lbl2.Source && lbl1.Key == lbl2.Key && lbl1.Value == lbl2.Value {
-				continue ThisLabelsLoop
+				continue Loop
 			}
 		}
 		return false
