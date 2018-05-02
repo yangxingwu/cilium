@@ -47,7 +47,8 @@ To deploy Cilium, run:
     .. parsed-literal::
 
       $ curl -s \ |SCM_WEB|\/examples/kubernetes/1.7/cilium.yaml | \\
-        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' | \\
+        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' \\
+            -e 's,image: cilium/cilium:.*$,image: cilium/cilium:1.0.1-sidecar-http-proxy,' | \\
         kubectl create -f -
 
       configmap "cilium-config" created
@@ -62,7 +63,8 @@ To deploy Cilium, run:
     .. parsed-literal::
 
       $ curl -s \ |SCM_WEB|\/examples/kubernetes/1.8/cilium.yaml | \\
-        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' | \\
+        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' \\
+            -e 's,image: cilium/cilium:.*$,image: cilium/cilium:1.0.1-sidecar-http-proxy,' | \\
         kubectl create -f -
 
       configmap "cilium-config" created
@@ -77,7 +79,8 @@ To deploy Cilium, run:
     .. parsed-literal::
 
       $ curl -s \ |SCM_WEB|\/examples/kubernetes/1.9/cilium.yaml | \\
-        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' | \\
+        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' \\
+            -e 's,image: cilium/cilium:.*$,image: cilium/cilium:1.0.1-sidecar-http-proxy,' | \\
         kubectl create -f -
 
       configmap "cilium-config" created
@@ -92,7 +95,8 @@ To deploy Cilium, run:
     .. parsed-literal::
 
       $ curl -s \ |SCM_WEB|\/examples/kubernetes/1.10/cilium.yaml | \\
-        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' | \\
+        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' \\
+            -e 's,image: cilium/cilium:.*$,image: cilium/cilium:1.0.1-sidecar-http-proxy,' | \\
         kubectl create -f -
 
       configmap "cilium-config" created
@@ -107,7 +111,8 @@ To deploy Cilium, run:
     .. parsed-literal::
 
       $ curl -s \ |SCM_WEB|\/examples/kubernetes/1.11/cilium.yaml | \\
-        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' | \\
+        sed -e 's/sidecar-http-proxy: "false"/sidecar-http-proxy: "true"/' \\
+            -e 's,image: cilium/cilium:.*$,image: cilium/cilium:1.0.1-sidecar-http-proxy,' | \\
         kubectl create -f -
 
       configmap "cilium-config" created
@@ -138,22 +143,6 @@ like above (a ``READY`` value of ``0`` is OK for this tutorial).
 
 Step 2: Install Istio
 =====================
-
-.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
-
-Temporarily disable policy enforcement in Cilium:
-
-::
-
-    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=never
-
-Wait until all endpoints are in the ``ready`` state:
-
-::
-
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
-    ready
 
 Download `Istio version 0.8.0 RC2 (0.8.0-pre20180421-09-15)
 <https://github.com/istio/istio/releases/>`_:
@@ -362,22 +351,6 @@ that all reviews are retrieved from ``reviews v1`` and none from
    :scale: 50 %
    :align: center
 
-.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
-
-Re-enable policy enforcement in Cilium:
-
-::
-
-    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=default
-
-Wait until all endpoints are in the ``ready`` state:
-
-::
-
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
-    ready ready ready ready ready ready ready ready ready ready ready ready ready
-
 The ``ratings-v1`` CiliumNetworkPolicy explicitly whitelists access
 to the ``ratings`` API only from ``productpage`` and ``reviews v2``:
 
@@ -491,22 +464,6 @@ whitelisted:
 
 .. literalinclude:: ../../examples/kubernetes-istio/bookinfo-productpage-v2-policy.yaml
 
-.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
-
-Temporarily disable policy enforcement in Cilium:
-
-::
-
-    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=never
-
-Wait until all endpoints are in the ``ready`` state:
-
-::
-
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
-    ready ready ready ready ready ready ready ready ready ready ready ready ready
-
 Because ``productpage v2`` sends messages into Kafka, we must first
 deploy a Kafka broker:
 
@@ -590,22 +547,6 @@ Check the progress of the deployment (every service should have an
     ratings-v1            1         1         1            1           19m
     reviews-v1            1         1         1            1           22m
     reviews-v2            1         1         1            1           19m
-
-.. TODO: Replace this with a pre-identity policy. https://github.com/cilium/cilium/pull/3911
-
-Re-enable policy enforcement in Cilium:
-
-::
-
-    $ export POD_CILIUM=`kubectl get pods -n kube-system -l k8s-app=cilium -o jsonpath='{.items[0].metadata.name}'`
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti cilium config PolicyEnforcement=default
-
-Wait until all endpoints are in the ``ready`` state:
-
-::
-
-    $ kubectl exec "${POD_CILIUM}" -n kube-system -ti -- cilium endpoint list -o jsonpath='{[*].status.state}'
-    ready ready ready ready ready ready ready ready ready ready ready ready ready ready ready
 
 Check that the product REST API is still accessible, and that Cilium
 now denies at Layer-7 any access to the reviews and ratings REST API:
