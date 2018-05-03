@@ -244,7 +244,7 @@ func (e *Endpoint) computeDesiredL3PolicyMapEntries(owner Owner, identityCache *
 }
 
 // Must be called with global repo.Mutrex, e.Mutex, and c.Mutex held
-func (e *Endpoint) regenerateL3Policy(owner Owner, repo *policy.Repository, revision uint64, c *policy.Consumable) (bool, error) {
+func (e *Endpoint) regenerateL3Policy(owner Owner, repo *policy.Repository, revision uint64) (bool, error) {
 
 	ctx := policy.SearchContext{
 		To: e.SecurityIdentity.LabelArray, // keep c.Mutex taken to protect this.
@@ -424,14 +424,8 @@ func (e *Endpoint) regeneratePolicy(owner Owner, opts models.ConfigurationMap) (
 		opts = make(models.ConfigurationMap)
 	}
 
-	c := e.Consumable
-
-	// We may update the consumable, serialize access between endpoints sharing it
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
-
 	// Containers without a security identity are not accessible
-	if c.ID == 0 {
+	if e.SecurityIdentity == nil {
 		e.getLogger().Warn("Endpoint lacks identity, skipping policy calculation")
 		return false, nil
 	}
@@ -439,20 +433,20 @@ func (e *Endpoint) regeneratePolicy(owner Owner, opts models.ConfigurationMap) (
 	// Skip L4 policy recomputation for this consumable if already valid.
 	// Rest of the policy computation still needs to be done for each endpoint
 	// separately even though the consumable may be shared between them.
-	if c.Iteration != revision {
+	if e.Iteration != revision {
 		err = e.resolveL4Policy(owner, repo)
 		if err != nil {
 			return false, err
 		}
 		// Result is valid until cache iteration advances
-		c.Iteration = revision
+		e.Iteration = revision
 	} else {
-		e.getLogger().WithField(logfields.Identity, c.ID).Debug("Reusing cached L4 policy")
+		e.getLogger().WithField(logfields.Identity, e.SecurityIdentity.ID).Debug("Reusing cached L4 policy")
 	}
 
 	// Calculate L3 (CIDR) policy.
 	var policyChanged bool
-	if policyChanged, err = e.regenerateL3Policy(owner, repo, revision, c); err != nil {
+	if policyChanged, err = e.regenerateL3Policy(owner, repo, revision); err != nil {
 		return false, err
 	}
 
