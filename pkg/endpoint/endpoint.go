@@ -1367,13 +1367,8 @@ func (e *Endpoint) base64() (string, error) {
 		jsonBytes []byte
 		err       error
 	)
-	if e.Consumable != nil {
-		e.Consumable.Mutex.RLock()
-		jsonBytes, err = json.Marshal(e)
-		e.Consumable.Mutex.RUnlock()
-	} else {
-		jsonBytes, err = json.Marshal(e)
-	}
+
+	jsonBytes, err = json.Marshal(e)
 	if err != nil {
 		return "", err
 	}
