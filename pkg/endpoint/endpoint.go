@@ -953,12 +953,9 @@ func (e *Endpoint) GetPolicyModel() *models.EndpointPolicyStatus {
 		return nil
 	}
 
-	if e.Consumable == nil {
+	if e.SecurityIdentity == nil {
 		return nil
 	}
-
-	e.Consumable.Mutex.RLock()
-	defer e.Consumable.Mutex.RUnlock()
 
 	realizedIngressIdentities := make([]int64, 0)
 	realizedEgressIdentities := make([]int64, 0)
@@ -1012,8 +1009,8 @@ func (e *Endpoint) GetPolicyModel() *models.EndpointPolicyStatus {
 	sortProxyStats(proxyStats)
 
 	mdl := &models.EndpointPolicy{
-		ID:                       int64(e.Consumable.ID),
-		Build:                    int64(e.Consumable.Iteration),
+		ID:                       int64(e.SecurityIdentity.ID),
+		Build:                    int64(e.Iteration),
 		PolicyRevision:           int64(e.policyRevision),
 		AllowedIngressIdentities: realizedIngressIdentities,
 		AllowedEgressIdentities:  realizedEgressIdentities,
@@ -1023,8 +1020,8 @@ func (e *Endpoint) GetPolicyModel() *models.EndpointPolicyStatus {
 	}
 
 	desiredMdl := &models.EndpointPolicy{
-		ID:                       int64(e.Consumable.ID),
-		Build:                    int64(e.Consumable.Iteration),
+		ID:                       int64(e.SecurityIdentity.ID),
+		Build:                    int64(e.Iteration),
 		PolicyRevision:           int64(e.policyRevision),
 		AllowedIngressIdentities: desiredIngressIdentities,
 		AllowedEgressIdentities:  desiredEgressIdentities,
