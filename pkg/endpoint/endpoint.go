@@ -447,6 +447,9 @@ type Endpoint struct {
 	// been updated.
 	RealizedL4Policy *policy.L4Policy `json:"-"`
 
+	// DesiredL4Policy is the desired L4Policy for the endpoint.
+	DesiredL4Policy *policy.L4Policy `json:"-"`
+
 	// PolicyMap is the policy related state of the datapath including
 	// reference to all policy related BPF
 	PolicyMap *policymap.PolicyMap `json:"-"`
