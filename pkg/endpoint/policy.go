@@ -68,15 +68,13 @@ func getSecurityIdentities(labelsMap *identityPkg.IdentityCache, selector *api.E
 	return identities
 }
 
-func (e *Endpoint) convertL4FilterToPolicyMapKeys(identities *identityPkg.IdentityCache,
-	filter *policy.L4Filter, direction policymap.TrafficDirection) []policymap.PolicyKey {
-
+func (e *Endpoint) convertL4FilterToPolicyMapKeys(filter *policy.L4Filter, direction policymap.TrafficDirection) []policymap.PolicyKey {
 	keysToAdd := []policymap.PolicyKey{}
 	port := uint16(filter.Port)
 	proto := uint8(filter.U8Proto)
 
 	for _, sel := range filter.Endpoints {
-		for _, id := range getSecurityIdentities(identities, &sel) {
+		for _, id := range getSecurityIdentities(e.LabelsMap, &sel) {
 			srcID := id.Uint32()
 			keyToAdd := policymap.PolicyKey{
 				Identity:         srcID,
@@ -90,22 +88,24 @@ func (e *Endpoint) convertL4FilterToPolicyMapKeys(identities *identityPkg.Identi
 	return keysToAdd
 }
 
-func (e *Endpoint) computeDesiredL4PolicyMapEntries(labelsMap *identityPkg.IdentityCache, desiredL4Policy *policy.L4Policy) (keysToAdd map[policymap.PolicyKey]struct{}) {
-	keysToAdd = map[policymap.PolicyKey]struct{}{}
+func (e *Endpoint) computeDesiredL4PolicyMapEntries(keysToAdd map[policymap.PolicyKey]struct{}) {
+	if keysToAdd == nil {
+		keysToAdd = map[policymap.PolicyKey]struct{}{}
+	}
 
-	if desiredL4Policy == nil {
+	if e.DesiredL4Policy == nil {
 		return
 	}
 
-	for _, filter := range desiredL4Policy.Ingress {
-		keysFromFilter := e.convertL4FilterToPolicyMapKeys(labelsMap, &filter, policymap.Ingress)
+	for _, filter := range e.DesiredL4Policy.Ingress {
+		keysFromFilter := e.convertL4FilterToPolicyMapKeys(&filter, policymap.Ingress)
 		for _, keyFromFilter := range keysFromFilter {
 			keysToAdd[keyFromFilter] = struct{}{}
 		}
 	}
 
-	for _, filter := range desiredL4Policy.Egress {
-		keysFromFilter := e.convertL4FilterToPolicyMapKeys(labelsMap, &filter, policymap.Egress)
+	for _, filter := range e.DesiredL4Policy.Egress {
+		keysFromFilter := e.convertL4FilterToPolicyMapKeys(&filter, policymap.Egress)
 		for _, keyFromFilter := range keysFromFilter {
 			keysToAdd[keyFromFilter] = struct{}{}
 		}
@@ -172,28 +172,22 @@ func (e *Endpoint) resolveL4Policy(owner Owner, repo *policy.Repository) error {
 	return nil
 }
 
-// Must be called with global endpoint.Mutex held
-// Returns a boolean to signalize if the policy was changed;
-// and a map matching which rules were successfully added/modified;
-// and a map matching which rules were successfully removed.
-// Must be called with Consumable mutex held.
-func (e *Endpoint) regenerateConsumable(owner Owner, labelsMap *identityPkg.IdentityCache,
-	repo *policy.Repository, c *policy.Consumable) (err error) {
-
-	if e.desiredMapState == nil {
-		e.desiredMapState = make(map[policymap.PolicyKey]struct{})
+func (e *Endpoint) computeDesiredPolicyMapState(owner Owner, labelsMap *identityPkg.IdentityCache,
+	repo *policy.Repository) {
+	desiredPolicyKeys := make(map[policymap.PolicyKey]struct{})
+	if e.LabelsMap != labelsMap {
+		e.LabelsMap = labelsMap
 	}
+	e.computeDesiredL4PolicyMapEntries(desiredPolicyKeys)
+	e.determineAllowLocalhost(owner, desiredPolicyKeys)
+	e.computeDesiredL3PolicyMapEntries(owner, labelsMap, repo, desiredPolicyKeys)
+	e.desiredMapState = desiredPolicyKeys
+}
 
-	desiredPolicyKeys := map[policymap.PolicyKey]struct{}{}
+func (e *Endpoint) determineAllowLocalhost(owner Owner, desiredPolicyKeys map[policymap.PolicyKey]struct{}) {
 
-	// L4 policy needs to be applied on two conditions
-	// 1. The L4 policy has changed
-	// 2. The set of applicable security identities has changed.
-	if e.RealizedL4Policy != e.DesiredL4Policy || e.LabelsMap != labelsMap {
-		desiredPolicyKeys = e.computeDesiredL4PolicyMapEntries(labelsMap, e.DesiredL4Policy)
-		// Reuse the common policy, will be used in lxc_config.h (CFG_CIDRL4_INGRESS and CFG_CIDRL4_EGRESS)
-		//e.DesiredL4Policy = c.L4Policy
-		e.LabelsMap = labelsMap // Remember the set of labels used
+	if desiredPolicyKeys == nil {
+		desiredPolicyKeys = map[policymap.PolicyKey]struct{}{}
 	}
 
 	if owner.AlwaysAllowLocalhost() || e.DesiredL4Policy.HasRedirect() {
@@ -203,13 +197,6 @@ func (e *Endpoint) regenerateConsumable(owner Owner, labelsMap *identityPkg.Iden
 		}
 		desiredPolicyKeys[keyToAdd] = struct{}{}
 	}
-
-	e.computeDesiredL3PolicyMapEntries(owner, labelsMap, repo, desiredPolicyKeys)
-
-	// Set new desired state for policymap for this endpoint.
-	e.desiredMapState = desiredPolicyKeys
-
-	return nil
 }
 
 func (e *Endpoint) computeDesiredL3PolicyMapEntries(owner Owner, identityCache *identityPkg.IdentityCache, repo *policy.Repository, desiredPolicyKeys map[policymap.PolicyKey]struct{}) {
@@ -300,7 +287,7 @@ func (e *Endpoint) updateNetworkPolicy(owner Owner) error {
 	}
 
 	// Compute the set of identities explicitly denied by policy.
-	// This loop is similar to the one in regenerateConsumable called
+	// This loop is similar to the one in computeDesiredPolicyMapState called
 	// above, but this set only contains the identities with "Denied" verdicts.
 	ctx := policy.SearchContext{
 		To: e.SecurityIdentity.LabelArray,
@@ -506,12 +493,7 @@ func (e *Endpoint) regeneratePolicy(owner Owner, opts models.ConfigurationMap) (
 
 	optsChanged := e.applyOptsLocked(opts)
 
-	// Determines all security-identity based policy.
-	// Updates e.LabelsMap to labelsMap if changed
-	err = e.regenerateConsumable(owner, labelsMap, repo, c)
-	if err != nil {
-		return false, err
-	}
+	e.computeDesiredPolicyMapState(owner, labelsMap, repo)
 
 	// If we are in this function, then policy has been calculated.
 	if !e.PolicyCalculated {
