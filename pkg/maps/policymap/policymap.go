@@ -141,6 +141,7 @@ func (pm *PolicyMap) Delete(id uint32, dport uint16, proto u8proto.U8proto, traf
 // DeleteEntry removes an entry from the PolicyMap. It can be used in
 // conjunction with DumpToSlice() to inspect and delete map entries.
 func (pm *PolicyMap) DeleteEntry(entry *PolicyEntryDump) error {
+	log.Debugf("PolicyMap.DeleteEntry: id: %d, dport: %d, proto: %d, trafficDirection: %s", entry.Key.Identity, entry.Key.DestPort, entry.Key.Nexthdr, entry.Key.TrafficDirection)
 	return bpf.DeleteElement(pm.Fd, unsafe.Pointer(&entry.Key))
 }
 
