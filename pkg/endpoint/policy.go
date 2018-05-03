@@ -223,40 +223,21 @@ func (e *Endpoint) regenerateConsumable(owner Owner, labelsMap *identityPkg.Iden
 		ingressCtx.From = labels
 		egressCtx.To = labels
 
-		e.getLogger().WithFields(logrus.Fields{
-			logfields.PolicyID: identity,
-			"ingress_context":  ingressCtx,
-		}).Debug("Evaluating ingress context for source PolicyID")
-
 		ingressAccess := repo.AllowsIngressLabelAccess(&ingressCtx)
 		if ingressAccess == api.Allowed {
 			keyToAdd := policymap.PolicyKey{
 				Identity:         identity.Uint32(),
 				TrafficDirection: policymap.Ingress.Uint8(),
 			}
-
 			desiredPolicyKeys[keyToAdd] = struct{}{}
 		}
 
-		e.getLogger().WithFields(logrus.Fields{
-			logfields.PolicyID: identity,
-			"egress_context":   egressCtx,
-		}).Debug("Evaluating egress context for source PolicyID")
-
 		egressAccess := repo.AllowsEgressLabelAccess(&egressCtx)
-
-		log.WithFields(logrus.Fields{
-			logfields.PolicyID:   identity,
-			logfields.EndpointID: e.ID,
-			"labels":             labels,
-		}).Debugf("egress verdict: %v", egressAccess)
-
 		if egressAccess == api.Allowed {
 			keyToAdd := policymap.PolicyKey{
 				Identity:         identity.Uint32(),
 				TrafficDirection: policymap.Egress.Uint8(),
 			}
-
 			desiredPolicyKeys[keyToAdd] = struct{}{}
 		}
 	}
