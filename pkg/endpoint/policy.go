@@ -510,18 +510,20 @@ func (e *Endpoint) regeneratePolicy(owner Owner, opts models.ConfigurationMap) (
 		e.syncPolicyMapController()
 	}
 
-	// If no policy or options change occurred for this endpoint then the endpoint is
-	// already running the latest revision, otherwise we have to wait for
-	// the regeneration of the endpoint to complete.
-	if !policyChanged && !optsChanged {
-		e.setPolicyRevision(revision)
-	}
-
 	e.getLogger().WithFields(logrus.Fields{
 		"policyChanged":       policyChanged,
 		"optsChanged":         optsChanged,
 		"policyRevision.next": e.nextPolicyRevision,
 	}).Debug("Done regenerating")
+
+	// If no policy or options change occurred for this endpoint then the
+	// endpoint is already running the latest revision; otherwise we have to
+	// wait for the regeneration of the endpoint to complete. This allows us
+	// to signal that regeneration of BPF is not necessary.
+	if !policyChanged && !optsChanged {
+		e.setPolicyRevision(revision)
+		return false, nil
+	}
 
 	needToRegenerateBPF := optsChanged || policyChanged || e.nextPolicyRevision > e.policyRevision
 
