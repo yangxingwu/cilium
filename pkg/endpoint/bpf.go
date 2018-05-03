@@ -596,13 +596,8 @@ func (e *Endpoint) regenerateBPF(owner Owner, epdir, reason string) (uint64, err
 
 		// Dry mode needs Network Policy Updates, but e.ProxyWaitGroup must not
 		// be initialized, as there is no proxy ACKing the changes.
-		if e.Consumable != nil {
-			e.Consumable.Mutex.Lock()
-			if err = e.updateNetworkPolicy(owner); err != nil {
-				e.Consumable.Mutex.Unlock()
-				return 0, err
-			}
-			e.Consumable.Mutex.Unlock()
+		if err = e.updateNetworkPolicy(owner); err != nil {
+			return 0, err
 		}
 
 		if err = e.writeHeaderfile(epdir, owner); err != nil {
