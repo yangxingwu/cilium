@@ -119,11 +119,6 @@ func (e *Endpoint) writeL4Map(fw *bufio.Writer, m policy.L4PolicyMap, configL4, 
 }
 
 func (e *Endpoint) writeL4Policy(fw *bufio.Writer) error {
-	if e.Consumable == nil {
-		return nil
-	}
-	e.Consumable.Mutex.RLock()
-	defer e.Consumable.Mutex.RUnlock()
 	if e.DesiredL4Policy == nil {
 		return nil
 	}
