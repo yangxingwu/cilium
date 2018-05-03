@@ -437,9 +437,6 @@ type Endpoint struct {
 	// PortMap is port mapping configuration of the endpoint
 	PortMap []PortMap // Port mapping used for this endpoint.
 
-	// Consumable represents the security-identity-based policy for this endpoint.
-	Consumable *policy.Consumable `json:"-"`
-
 	// Iteration policy of the Endpoint - what does that even mean??
 	Iteration uint64 `json:"-"`
 
