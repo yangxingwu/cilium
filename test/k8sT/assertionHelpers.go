@@ -51,3 +51,8 @@ func ExpectCiliumReady(vm *helpers.Kubectl) {
 	_, err := vm.WaitforPods(helpers.KubeSystemNamespace, "-l k8s-app=cilium", 600)
 	ExpectWithOffset(1, err).Should(BeNil())
 }
+
+func ExpectAllPodsTerminated(vm *helpers.Kubectl) {
+	err := vm.WaitCleanAllTerminatingPods()
+	ExpectWithOffset(1, err).To(BeNil(), "Terminating containers are not deleted after timeout")
+}
