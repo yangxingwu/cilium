@@ -682,7 +682,7 @@ func (e *Endpoint) regenerateBPF(owner Owner, epdir, reason string) (uint64, err
 			return 0, fmt.Errorf("unable to regenerate policy for '%s': %s", e.PolicyMap.String(), err)
 		}
 
-		// Synchronously try to updat PolicyMap for this endpoint. If any
+		// Synchronously try to update PolicyMap for this endpoint. If any
 		// part of updating the PolicyMap fails, bail out and do not generate
 		// BPF. Unfortunately, this means that the map will be in an inconsistent
 		// state with the current program (if it exists) for this endpoint.
