@@ -50,12 +50,11 @@ var _ = Describe("K8sValidatedServicesTest", func() {
 		kubectl = helpers.CreateKubectl(helpers.K8s1VMName(), logger)
 		path := helpers.ManifestGet("cilium_ds.yaml")
 		kubectl.Apply(path)
-		err := kubectl.WaitforPods(helpers.KubeSystemNamespace, "-l k8s-app=cilium", 600)
-		Expect(err).Should(BeNil())
+		ExpectCiliumReady(kubectl)
 
 		ExpectKubeDNSReady(kubectl)
 
-		ciliumPodK8s1, err = kubectl.GetCiliumPodOnNode(helpers.KubeSystemNamespace, helpers.K8s1)
+		_, err := kubectl.GetCiliumPodOnNode(helpers.KubeSystemNamespace, helpers.K8s1)
 		Expect(err).Should(BeNil(), "Cannot get cilium pod on k8s1")
 	})
 
