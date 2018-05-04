@@ -187,9 +187,9 @@ func runAllAfterFail(cs *scope, testName string) {
 	}
 
 	for _, body := range cs.afterFail {
-		if ginkgo.CurrentGinkgoTestDescription().Failed {
-			body()
-		}
+		//if ginkgo.CurrentGinkgoTestDescription().Failed {
+		body()
+		//}
 	}
 
 	if cs.parent != nil {
