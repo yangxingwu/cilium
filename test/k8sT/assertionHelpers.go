@@ -48,7 +48,7 @@ func ExpectKubeDNSReady(vm *helpers.Kubectl) {
 }
 
 func ExpectCiliumReady(vm *helpers.Kubectl) {
-	_, err := vm.WaitforPods(helpers.KubeSystemNamespace, "-l k8s-app=cilium", 600)
+	err := vm.WaitforPods(helpers.KubeSystemNamespace, "-l k8s-app=cilium", 600)
 	ExpectWithOffset(1, err).Should(BeNil())
 }
 
