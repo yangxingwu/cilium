@@ -63,6 +63,7 @@ func (m *Manager) UpdateController(name string, params ControllerParams) *Contro
 
 	if oldCtrl, ok := m.controllers[name]; ok {
 		oldCtrl.stopController()
+		m.removeController(oldCtrl)
 	}
 
 	ctrl := &Controller{
@@ -93,7 +94,7 @@ func (m *Manager) removeController(ctrl *Controller) {
 	delete(globalStatus.controllers, ctrl.uuid)
 	globalStatus.mutex.Unlock()
 
-	ctrl.getLogger().Debug("Removed update controller")
+	ctrl.getLogger().Debug("Removed controller")
 }
 
 // RemoveController stops and removes a controller from the manager. If DoFunc
